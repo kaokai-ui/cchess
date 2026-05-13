@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import Home from './pages/Home';
 import DarkGame from './pages/DarkGame';
 import BrightGame from './pages/BrightGame';
@@ -10,9 +11,35 @@ import Admin from './pages/Admin';
 
 const routerBasename = import.meta.env.VITE_BASE_PATH?.replace(/\/$/, '') || '/';
 
+function GitHubPagesRedirect() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const redirectPath = params.get('redirect');
+
+    if (!redirectPath?.startsWith('/')) {
+      return;
+    }
+
+    params.delete('redirect');
+    const nextSearch = params.toString();
+    navigate(
+      {
+        pathname: redirectPath,
+        search: nextSearch ? `?${nextSearch}` : '',
+      },
+      { replace: true },
+    );
+  }, [navigate]);
+
+  return null;
+}
+
 function App() {
   return (
     <BrowserRouter basename={routerBasename}>
+      <GitHubPagesRedirect />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/game/dark" element={<DarkGame />} />
