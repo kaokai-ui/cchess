@@ -1,0 +1,25 @@
+{
+  "rules": {
+    ".read": "auth != null",
+    "rooms": {
+      "$roomId": {
+        ".read": "auth != null",
+        ".write": "auth != null && ((!data.exists() && newData.child('hostUid').val() === auth.uid) || (data.exists() && (data.child('hostUid').val() === auth.uid || data.child('guestUid').val() === auth.uid || (data.child('status').val() === 'waiting' && data.child('guestUid').val() == null && newData.child('guestUid').val() === auth.uid && newData.child('hostUid').val() === data.child('hostUid').val()))))"
+      }
+    },
+    "roomPresence": {
+      "$roomId": {
+        "$userId": {
+          ".read": "auth != null",
+          ".write": "auth != null && auth.uid === $userId"
+        }
+      }
+    },
+    "userSessions": {
+      "$userId": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === $userId"
+      }
+    }
+  }
+}
