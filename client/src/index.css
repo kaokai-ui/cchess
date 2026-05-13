@@ -23,6 +23,16 @@ body {
   box-sizing: border-box;
 }
 
+.bright-board-shell {
+  max-width: min(100%, calc((100dvh - 2rem) * 0.78), 880px);
+}
+
+@media (pointer: coarse) and (orientation: landscape) and (min-width: 768px) and (max-width: 1366px) {
+  .bright-board-shell {
+    max-width: min(100%, calc((100dvh - 1.5rem) * 0.9), 960px);
+  }
+}
+
 /* Custom scrollbar for better aesthetics */
 ::-webkit-scrollbar {
   width: 8px;
