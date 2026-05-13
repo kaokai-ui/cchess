@@ -63,5 +63,5 @@ npx cap open android
 
 ## Planning Docs
 
-- `DEVELOPMENT_PLAN.md` — full spec, phases, UI details
-- `DEVELOPMENT_NOTES.md` — Firebase and connectivity decisions
+- `local-admin/DEVELOPMENT_PLAN.md` — full spec, phases, UI details
+- `local-admin/DEVELOPMENT_NOTES.md` — Firebase and connectivity decisions

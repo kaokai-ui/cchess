@@ -1,6 +1,6 @@
 # 未實作功能清單
 
-根據 DEVELOPMENT_PLAN.md 規劃，以下功能尚未實作：
+根據 `local-admin/DEVELOPMENT_PLAN.md` 規劃，以下功能尚未實作：
 
 ## Phase 6: 連線對戰
 
