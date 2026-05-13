@@ -34,16 +34,3 @@ export interface OnlineRoomSnapshot {
   room: OnlineRoom | null;
   presence: Record<string, PresenceSnapshot>;
 }
-
-export interface AdminOverview {
-  rooms: Record<string, OnlineRoom>;
-  sessions: Record<
-    string,
-    {
-      connected: boolean;
-      lastSeen: number;
-      roomId: string;
-      variant: GameVariant;
-    }
-  >;
-}

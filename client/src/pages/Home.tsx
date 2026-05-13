@@ -164,20 +164,12 @@ const Home: React.FC = () => {
             {playMode === 'solo' ? '開始遊戲' : '進入連線大廳'}
           </button>
 
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              className="w-full py-3 bg-gray-600 hover:bg-gray-700 text-white text-lg font-bold rounded-xl transition-all hover:scale-105"
-              onClick={() => navigate('/settings')}
-            >
-              遊戲設定
-            </button>
-            <button
-              className="w-full py-3 bg-stone-700 hover:bg-stone-800 text-white text-lg font-bold rounded-xl transition-all hover:scale-105"
-              onClick={() => navigate('/admin')}
-            >
-              管理介面
-            </button>
-          </div>
+          <button
+            className="w-full py-3 bg-gray-600 hover:bg-gray-700 text-white text-lg font-bold rounded-xl transition-all hover:scale-105"
+            onClick={() => navigate('/settings')}
+          >
+            遊戲設定
+          </button>
 
           <div className="rounded-xl border border-stone-200 bg-stone-50 px-4 py-4 text-base sm:text-lg leading-8">
             <p className={`font-bold ${statusClass(firebaseReady)}`}>

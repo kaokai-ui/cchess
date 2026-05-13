@@ -7,7 +7,6 @@ import Settings from './pages/Settings';
 import OnlineLobby from './pages/OnlineLobby';
 import OnlineBrightGame from './pages/OnlineBrightGame';
 import OnlineDarkGame from './pages/OnlineDarkGame';
-import Admin from './pages/Admin';
 
 const routerBasename = import.meta.env.VITE_BASE_PATH?.replace(/\/$/, '') || '/';
 
@@ -47,8 +46,8 @@ function App() {
         <Route path="/online/lobby" element={<OnlineLobby />} />
         <Route path="/online/game/bright/:roomId" element={<OnlineBrightGame />} />
         <Route path="/online/game/dark/:roomId" element={<OnlineDarkGame />} />
-        <Route path="/admin" element={<Admin />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="*" element={<Home />} />
       </Routes>
     </BrowserRouter>
   );
