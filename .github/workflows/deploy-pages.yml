@@ -51,15 +51,15 @@ jobs:
       - name: Build client
         working-directory: client
         env:
-          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
-          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
-          VITE_FIREBASE_DATABASE_URL: ${{ vars.VITE_FIREBASE_DATABASE_URL }}
-          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
-          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
-          VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
-          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
-          VITE_ENABLE_APPCHECK: ${{ vars.VITE_ENABLE_APPCHECK }}
-          VITE_FIREBASE_APPCHECK_SITE_KEY: ${{ vars.VITE_FIREBASE_APPCHECK_SITE_KEY }}
+          VITE_FIREBASE_API_KEY: AIzaSyArjC_4QzwAhVPxhqt-dHK40R5hyEqMxPw
+          VITE_FIREBASE_AUTH_DOMAIN: cchess-488bd.firebaseapp.com
+          VITE_FIREBASE_DATABASE_URL: https://cchess-488bd-default-rtdb.asia-southeast1.firebasedatabase.app/
+          VITE_FIREBASE_PROJECT_ID: cchess-488bd
+          VITE_FIREBASE_APP_ID: 1:154668755946:web:2e3ac5ec6f7d9e387ce093
+          VITE_FIREBASE_STORAGE_BUCKET: cchess-488bd.firebasestorage.app
+          VITE_FIREBASE_MESSAGING_SENDER_ID: 154668755946
+          VITE_ENABLE_APPCHECK: true
+          VITE_FIREBASE_APPCHECK_SITE_KEY: 6LdYs-csAAAAAO5TASizUZT0ousM2Qzvbzg36q-b
           VITE_BASE_PATH: ${{ steps.base-path.outputs.value }}
         run: npm run build
 
