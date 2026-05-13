@@ -8,9 +8,11 @@ import OnlineBrightGame from './pages/OnlineBrightGame';
 import OnlineDarkGame from './pages/OnlineDarkGame';
 import Admin from './pages/Admin';
 
+const routerBasename = import.meta.env.VITE_BASE_PATH?.replace(/\/$/, '') || '/';
+
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={routerBasename}>
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/game/dark" element={<DarkGame />} />
