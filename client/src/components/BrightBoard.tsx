@@ -33,7 +33,10 @@ const BrightBoard: React.FC<BrightBoardProps> = ({
   // Grid represents intersections. Pieces sit in the center of each cell.
   // Lines are drawn connecting the centers.
   return (
-    <div className="w-full mx-auto" style={{ maxWidth: 'min(95vw, 85vh * 0.9)' }}>
+    <div
+      className="w-full mx-auto"
+      style={{ maxWidth: 'min(100%, calc((100dvh - 2rem) * 0.78), 880px)' }}
+    >
       <div className="bg-[#e8d5b7] p-3 sm:p-4 rounded-lg shadow-2xl border-2 border-[#5d4037] relative">
         
         {/* SVG Board Lines */}

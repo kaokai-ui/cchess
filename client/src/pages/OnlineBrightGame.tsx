@@ -124,24 +124,6 @@ const OnlineBrightGame: React.FC = () => {
     navigate('/');
   };
 
-  const handleCopyRoomId = async () => {
-    if (!room) {
-      return;
-    }
-
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(room.roomId);
-      return;
-    }
-
-    const input = document.createElement('input');
-    input.value = room.roomId;
-    document.body.appendChild(input);
-    input.select();
-    document.execCommand('copy');
-    document.body.removeChild(input);
-  };
-
   const handleCellClick = async (pos: Position) => {
     if (!room || !isPlayerTurn(room, myUid) || room.phase !== 'playing') {
       return;
@@ -217,91 +199,81 @@ const OnlineBrightGame: React.FC = () => {
   }
 
   return (
-    <div className="h-screen bg-gradient-to-b from-amber-50 to-amber-100 flex flex-col overflow-hidden">
-      <div className="flex-shrink-0 px-3 py-2 sm:px-4 sm:py-3">
-        <div className="max-w-5xl mx-auto space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="h-screen bg-gradient-to-b from-amber-50 to-amber-100 overflow-hidden">
+      <div className="flex h-full min-h-0 flex-col gap-3 p-3 md:flex-row md:p-4">
+        <aside className="flex-shrink-0 space-y-3 overflow-y-auto md:w-64 lg:w-72 xl:w-80">
+          <div className="space-y-3">
             <button
-              className="px-4 py-2 bg-gray-700 text-white rounded-xl text-lg font-bold"
+              className="w-full px-4 py-3 bg-gray-700 text-white rounded-xl text-lg font-bold"
               onClick={() => void handleLeave()}
             >
               離開房間
             </button>
-            <div className="flex flex-wrap gap-2">
-              <button
-                className="px-4 py-2 bg-amber-600 text-white rounded-xl text-lg font-bold"
-                onClick={() => void handleCopyRoomId()}
-              >
-                複製房號
-              </button>
-              <div className="px-4 py-2 bg-white rounded-xl shadow-sm">
-                <label className="block text-xs text-gray-500 mb-1">房號</label>
-                <input
-                  className="w-28 sm:w-36 bg-transparent text-lg font-bold text-amber-900 outline-none select-all"
-                  readOnly
-                  value={room.roomId}
-                  onFocus={(event) => event.currentTarget.select()}
-                  onClick={(event) => event.currentTarget.select()}
-                />
-              </div>
+
+            <div className="px-4 py-3 bg-white rounded-xl shadow-sm">
+              <label className="block text-xs text-gray-500 mb-1">房號</label>
+              <input
+                className="w-full bg-transparent text-lg font-bold text-amber-900 outline-none select-all"
+                readOnly
+                value={room.roomId}
+                onFocus={(event) => event.currentTarget.select()}
+                onClick={(event) => event.currentTarget.select()}
+              />
             </div>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="bg-white rounded-2xl px-4 py-3 shadow-sm">
-              <p className="text-sm text-gray-500">你的身份</p>
-              <p className="text-xl font-bold text-amber-900">{getColorLabel(myColor)}</p>
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-1">
+            <div className="bg-white rounded-xl px-4 py-3 shadow-sm">
+              <p className="text-xs text-gray-500">你的身份</p>
+              <p className="text-lg font-bold text-amber-900">{getColorLabel(myColor)}</p>
             </div>
-            <div className="bg-white rounded-2xl px-4 py-3 shadow-sm">
-              <p className="text-sm text-gray-500">房間狀態</p>
-              <p className="text-xl font-bold text-amber-900">
+            <div className="bg-white rounded-xl px-4 py-3 shadow-sm">
+              <p className="text-xs text-gray-500">房間狀態</p>
+              <p className="text-lg font-bold text-amber-900">
                 {waitingForGuest ? '等待對手加入' : turnLabel}
               </p>
             </div>
-            <div className="bg-white rounded-2xl px-4 py-3 shadow-sm">
-              <p className="text-sm text-gray-500">在線玩家</p>
-              <p className="text-xl font-bold text-amber-900">
+            <div className="bg-white rounded-xl px-4 py-3 shadow-sm">
+              <p className="text-xs text-gray-500">在線玩家</p>
+              <p className="text-lg font-bold text-amber-900">
                 {getRoomPlayerCount(room)} / 2
               </p>
             </div>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="bg-white rounded-2xl px-4 py-3 shadow-sm">
-              <p className="text-sm text-gray-500">房主</p>
-              <p className="text-lg font-bold text-amber-900">
+            <div className="bg-white rounded-xl px-4 py-3 shadow-sm">
+              <p className="text-xs text-gray-500">房主</p>
+              <p className="text-base font-bold text-amber-900">
                 紅方 · {getConnectionLabel(room.hostUid, presence)}
               </p>
             </div>
-            <div className="bg-white rounded-2xl px-4 py-3 shadow-sm">
-              <p className="text-sm text-gray-500">對手</p>
-              <p className="text-lg font-bold text-amber-900">
+            <div className="bg-white rounded-xl px-4 py-3 shadow-sm">
+              <p className="text-xs text-gray-500">對手</p>
+              <p className="text-base font-bold text-amber-900">
                 黑方 · {getConnectionLabel(room.guestUid, presence)}
               </p>
             </div>
           </div>
-        </div>
-      </div>
 
-      <div className="flex-1 flex items-center justify-center min-h-0 px-2">
-        <BrightBoard
-          board={room.board}
-          selectedCell={activeSelection}
-          validMoves={validMoves}
-          lastMove={room.lastMove}
-          onCellClick={(pos) => void handleCellClick(pos)}
-        />
-      </div>
-
-      <div className="flex-shrink-0 py-2 text-center px-4">
-        <span className="inline-block px-4 py-2 bg-amber-100 rounded-xl text-sm sm:text-base text-amber-900">
-          {room.message}
-        </span>
-        {error && (
-          <div className="mt-2 inline-block px-4 py-2 bg-red-50 border border-red-300 rounded-xl text-sm sm:text-base text-red-700">
-            {error}
+          <div className="space-y-2 text-center md:text-left">
+            <span className="block px-4 py-2 bg-amber-100 rounded-xl text-sm text-amber-900">
+              {room.message}
+            </span>
+            {error && (
+              <div className="px-4 py-2 bg-red-50 border border-red-300 rounded-xl text-sm text-red-700">
+                {error}
+              </div>
+            )}
           </div>
-        )}
+        </aside>
+
+        <main className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
+          <BrightBoard
+            board={room.board}
+            selectedCell={activeSelection}
+            validMoves={validMoves}
+            lastMove={room.lastMove}
+            onCellClick={(pos) => void handleCellClick(pos)}
+          />
+        </main>
       </div>
 
       {(waitingForGuest || room.status === 'abandoned' || room.phase === 'gameOver') && (
@@ -330,12 +302,6 @@ const OnlineBrightGame: React.FC = () => {
                     onFocus={(event) => event.currentTarget.select()}
                     onClick={(event) => event.currentTarget.select()}
                   />
-                  <button
-                    className="w-full py-3 bg-amber-600 text-white text-lg font-bold rounded-2xl"
-                    onClick={() => void handleCopyRoomId()}
-                  >
-                    複製房號邀請對手
-                  </button>
                 </div>
               )}
               {room.phase === 'gameOver' && room.status === 'finished' && (
