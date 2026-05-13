@@ -61,7 +61,7 @@ jobs:
           VITE_FIREBASE_STORAGE_BUCKET: cchess-488bd.firebasestorage.app
           VITE_FIREBASE_MESSAGING_SENDER_ID: 154668755946
           VITE_ENABLE_APPCHECK: true
-          VITE_FIREBASE_APPCHECK_SITE_KEY: 6LdYs-csAAAAAO5TASizUZT0ousM2Qzvbzg36q-b
+          VITE_FIREBASE_APPCHECK_SITE_KEY: 6Leuz-csAAAAACUjHAYWamojDZutYc1T5JotGokZ
           VITE_BASE_PATH: ${{ steps.base-path.outputs.value }}
         run: npm run build
 
