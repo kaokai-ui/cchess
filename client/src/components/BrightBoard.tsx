@@ -7,7 +7,15 @@ interface BrightBoardProps {
   selectedCell: Position | null;
   validMoves: Position[];
   lastMove: { from: Position; to: Position } | null;
+  viewpoint?: 'red' | 'black';
   onCellClick: (pos: Position) => void;
+}
+
+function rotatePosition(pos: Position, rows: number, cols: number): Position {
+  return {
+    row: rows - 1 - pos.row,
+    col: cols - 1 - pos.col,
+  };
 }
 
 const BrightBoard: React.FC<BrightBoardProps> = ({
@@ -15,20 +23,49 @@ const BrightBoard: React.FC<BrightBoardProps> = ({
   selectedCell,
   validMoves,
   lastMove,
+  viewpoint = 'red',
   onCellClick,
 }) => {
+  const rowCount = board.length;
+  const colCount = board[0]?.length ?? 0;
+  const shouldRotate = viewpoint === 'black';
+
+  const toDisplayPosition = (pos: Position) =>
+    shouldRotate ? rotatePosition(pos, rowCount, colCount) : pos;
+
+  const toBoardPosition = (pos: Position) =>
+    shouldRotate ? rotatePosition(pos, rowCount, colCount) : pos;
+
+  const displayBoard = shouldRotate
+    ? board
+        .slice()
+        .reverse()
+        .map((row) => row.slice().reverse())
+    : board;
+
+  const displaySelectedCell = selectedCell ? toDisplayPosition(selectedCell) : null;
+  const displayValidMoves = validMoves.map(toDisplayPosition);
+  const displayLastMove = lastMove
+    ? {
+        from: toDisplayPosition(lastMove.from),
+        to: toDisplayPosition(lastMove.to),
+      }
+    : null;
+
   const isSelected = (row: number, col: number) =>
-    selectedCell !== null && selectedCell.row === row && selectedCell.col === col;
+    displaySelectedCell !== null &&
+    displaySelectedCell.row === row &&
+    displaySelectedCell.col === col;
 
   const isValidMove = (row: number, col: number) =>
-    validMoves.some((m) => m.row === row && m.col === col);
+    displayValidMoves.some((m) => m.row === row && m.col === col);
 
   const isLastMoveTarget = (row: number, col: number) =>
-    lastMove !== null &&
-    lastMove !== undefined &&
-    lastMove.to !== undefined &&
-    lastMove.to.row === row &&
-    lastMove.to.col === col;
+    displayLastMove !== null &&
+    displayLastMove !== undefined &&
+    displayLastMove.to !== undefined &&
+    displayLastMove.to.row === row &&
+    displayLastMove.to.col === col;
 
   // Grid represents intersections. Pieces sit in the center of each cell.
   // Lines are drawn connecting the centers.
@@ -75,7 +112,7 @@ const BrightBoard: React.FC<BrightBoardProps> = ({
 
         {/* Piece Grid - 10 rows x 9 columns */}
         <div className="grid grid-rows-10 grid-cols-9 gap-0 relative z-10">
-          {board.map((row, rowIdx) =>
+          {displayBoard.map((row, rowIdx) =>
             row.map((cell, colIdx) => (
               <div
                 key={`${rowIdx}-${colIdx}`}
@@ -86,7 +123,7 @@ const BrightBoard: React.FC<BrightBoardProps> = ({
                   isSelected={isSelected(rowIdx, colIdx)}
                   isValidMove={isValidMove(rowIdx, colIdx)}
                   isLastMove={isLastMoveTarget(rowIdx, colIdx)}
-                  onClick={() => onCellClick({ row: rowIdx, col: colIdx })}
+                  onClick={() => onCellClick(toBoardPosition({ row: rowIdx, col: colIdx }))}
                 />
               </div>
             ))

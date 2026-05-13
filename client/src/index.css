@@ -24,12 +24,12 @@ body {
 }
 
 .bright-board-shell {
-  max-width: min(100%, calc((100dvh - 2rem) * 0.78), 880px);
+  max-width: min(100%, calc((100dvh - 1.5rem) * 0.84), 980px);
 }
 
 @media (pointer: coarse) and (orientation: landscape) and (min-width: 768px) and (max-width: 1366px) {
   .bright-board-shell {
-    max-width: min(100%, calc((100dvh - 1.5rem) * 0.9), 960px);
+    max-width: min(100%, calc((100dvh - 1rem) * 0.95), 1080px);
   }
 }
 

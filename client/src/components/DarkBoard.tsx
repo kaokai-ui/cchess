@@ -33,7 +33,7 @@ const DarkBoard: React.FC<DarkBoardProps> = ({
     lastMove.to.col === col;
 
   return (
-    <div className="w-full max-w-3xl mx-auto p-1 sm:p-2">
+    <div className="w-full max-w-4xl xl:max-w-[72rem] mx-auto p-1 sm:p-2">
       {/* Board Outer Border */}
       <div className="bg-[#5d4037] p-2 sm:p-3 rounded-xl shadow-2xl border-4 border-[#3e2723]">
         {/* Board Inner Background (Wood texture simulation) */}

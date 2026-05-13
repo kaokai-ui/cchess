@@ -224,19 +224,19 @@ const OnlineDarkGame: React.FC = () => {
   return (
     <div className="h-screen bg-gradient-to-b from-amber-50 to-amber-100 overflow-hidden">
       <div className="flex h-full min-h-0 flex-col gap-3 p-3 md:flex-row md:p-4">
-        <aside className="flex-shrink-0 space-y-3 overflow-y-auto md:w-64 lg:w-72 xl:w-80">
+        <aside className="flex-shrink-0 space-y-2 overflow-y-auto md:w-52 lg:w-56 xl:w-60">
           <div className="space-y-3">
             <button
-              className="w-full px-4 py-3 bg-gray-700 text-white rounded-xl text-lg font-bold"
+              className="w-full px-4 py-3 bg-gray-700 text-white rounded-xl text-base font-bold"
               onClick={() => void handleLeave()}
             >
               離開房間
             </button>
 
-            <div className="px-4 py-3 bg-white rounded-xl shadow-sm">
+            <div className="px-3 py-2.5 bg-white rounded-xl shadow-sm">
               <label className="block text-xs text-gray-500 mb-1">房號</label>
               <input
-                className="w-full bg-transparent text-lg font-bold text-amber-900 outline-none select-all"
+                className="w-full bg-transparent text-base font-bold text-amber-900 outline-none select-all"
                 readOnly
                 value={room.roomId}
                 onFocus={(event) => event.currentTarget.select()}
@@ -245,43 +245,43 @@ const OnlineDarkGame: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-1">
-            <div className="bg-white rounded-xl px-4 py-3 shadow-sm">
+          <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-1">
+            <div className="bg-white rounded-xl px-3 py-2.5 shadow-sm">
               <p className="text-xs text-gray-500">你的身份</p>
-              <p className="text-lg font-bold text-amber-900">{getColorLabel(myColor)}</p>
+              <p className="text-base font-bold text-amber-900">{getColorLabel(myColor)}</p>
             </div>
-            <div className="bg-white rounded-xl px-4 py-3 shadow-sm">
+            <div className="bg-white rounded-xl px-3 py-2.5 shadow-sm">
               <p className="text-xs text-gray-500">房間狀態</p>
-              <p className="text-lg font-bold text-amber-900">
+              <p className="text-base font-bold text-amber-900">
                 {waitingForGuest ? '等待對手加入' : turnText}
               </p>
             </div>
-            <div className="bg-white rounded-xl px-4 py-3 shadow-sm">
+            <div className="bg-white rounded-xl px-3 py-2.5 shadow-sm">
               <p className="text-xs text-gray-500">在線玩家</p>
-              <p className="text-lg font-bold text-amber-900">
+              <p className="text-base font-bold text-amber-900">
                 {getRoomPlayerCount(room)} / 2
               </p>
             </div>
-            <div className="bg-white rounded-xl px-4 py-3 shadow-sm">
+            <div className="bg-white rounded-xl px-3 py-2.5 shadow-sm">
               <p className="text-xs text-gray-500">房主</p>
-              <p className="text-base font-bold text-amber-900">
+              <p className="text-sm font-bold text-amber-900">
                 {getColorLabel(getPlayerColor(room, room.hostUid))} · {getConnectionLabel(room.hostUid, presence)}
               </p>
             </div>
-            <div className="bg-white rounded-xl px-4 py-3 shadow-sm">
+            <div className="bg-white rounded-xl px-3 py-2.5 shadow-sm">
               <p className="text-xs text-gray-500">對手</p>
-              <p className="text-base font-bold text-amber-900">
+              <p className="text-sm font-bold text-amber-900">
                 {getColorLabel(room.guestUid ? getPlayerColor(room, room.guestUid) : null)} · {getConnectionLabel(room.guestUid, presence)}
               </p>
             </div>
           </div>
 
           <div className="space-y-2 text-center md:text-left">
-            <span className="block px-4 py-2 bg-amber-100 rounded-xl text-sm text-amber-900">
+            <span className="block px-3 py-2 bg-amber-100 rounded-xl text-sm text-amber-900">
               {room.message}
             </span>
             {error && (
-              <div className="px-4 py-2 bg-red-50 border border-red-300 rounded-xl text-sm text-red-700">
+              <div className="px-3 py-2 bg-red-50 border border-red-300 rounded-xl text-sm text-red-700">
                 {error}
               </div>
             )}
