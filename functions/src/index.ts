@@ -1,13 +1,10 @@
 import { initializeApp } from 'firebase-admin/app';
 import { getDatabase } from 'firebase-admin/database';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { defineString } from 'firebase-functions/params';
 import { setGlobalOptions } from 'firebase-functions/v2';
 
 initializeApp();
 setGlobalOptions({ region: 'asia-east1' });
-
-const adminDebugToken = defineString('ADMIN_DEBUG_TOKEN');
 
 type PieceColor = 'red' | 'black';
 
@@ -25,19 +22,18 @@ interface OnlineRoom {
   updatedAt: number;
 }
 
-function requireAdminToken(token: unknown) {
-  if (typeof token !== 'string' || !token.trim()) {
-    throw new HttpsError('invalid-argument', '請提供管理 debug token。');
-  }
-
-  if (token !== adminDebugToken.value()) {
-    throw new HttpsError('permission-denied', '管理 debug token 不正確。');
-  }
-}
-
 function assertAuthenticated(uid: string | undefined) {
   if (!uid) {
     throw new HttpsError('unauthenticated', '請先完成匿名登入。');
+  }
+}
+
+async function assertDatabaseAdmin(uid: string | undefined) {
+  assertAuthenticated(uid);
+
+  const snapshot = await getDatabase().ref(`admins/${uid}`).get();
+  if (snapshot.val() !== true) {
+    throw new HttpsError('permission-denied', '目前 UID 尚未被授權為管理者。');
   }
 }
 
@@ -56,8 +52,7 @@ async function removeSessionIfMatches(roomId: string, userId: string | null) {
 export const adminDeleteRoom = onCall(
   { enforceAppCheck: true },
   async (request) => {
-    assertAuthenticated(request.auth?.uid);
-    requireAdminToken(request.data?.adminToken);
+    await assertDatabaseAdmin(request.auth?.uid);
 
     const roomId = String(request.data?.roomId || '').trim().toUpperCase();
     if (!roomId) {
@@ -90,8 +85,7 @@ export const adminDeleteRoom = onCall(
 export const adminDeleteUser = onCall(
   { enforceAppCheck: true },
   async (request) => {
-    assertAuthenticated(request.auth?.uid);
-    requireAdminToken(request.data?.adminToken);
+    await assertDatabaseAdmin(request.auth?.uid);
 
     const userId = String(request.data?.userId || '').trim();
     if (!userId) {

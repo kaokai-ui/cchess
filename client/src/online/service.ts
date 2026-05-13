@@ -1,4 +1,4 @@
-import { get, onDisconnect, onValue, ref, remove, runTransaction, set } from 'firebase/database';
+import { get, onDisconnect, onValue, ref, remove, runTransaction, set, update } from 'firebase/database';
 import {
   checkStalemate as checkBrightStalemate,
   checkWinner as checkBrightWinner,
@@ -878,6 +878,146 @@ export function subscribeToAdminOverview(
     unsubscribeRooms();
     unsubscribeSessions();
   };
+}
+
+async function removeSessionUpdateIfMatches(
+  updates: Record<string, OnlineRoom | null>,
+  roomId: string,
+  userId: string | null,
+) {
+  if (!userId) {
+    return;
+  }
+
+  const db = requireDatabase();
+  const sessionSnapshot = await get(ref(db, `userSessions/${userId}`));
+  if (!sessionSnapshot.exists() || sessionSnapshot.child('roomId').val() === roomId) {
+    updates[`userSessions/${userId}`] = null;
+  }
+}
+
+export async function isCurrentUserDatabaseAdmin() {
+  requireConfiguredFirebase();
+  const db = requireDatabase();
+  const user = await ensureAnonymousAuth();
+  const snapshot = await get(ref(db, `admins/${user.uid}`));
+  return snapshot.val() === true;
+}
+
+export async function adminDeleteRoom(roomId: string) {
+  requireConfiguredFirebase();
+  const db = requireDatabase();
+  await ensureAnonymousAuth();
+
+  const normalizedRoomId = roomId.trim().toUpperCase();
+  if (!normalizedRoomId) {
+    throw new Error('請提供欲刪除的房號。');
+  }
+
+  const roomSnapshot = await get(ref(db, `rooms/${normalizedRoomId}`));
+  if (!roomSnapshot.exists()) {
+    throw new Error('指定房間不存在。');
+  }
+
+  const room = normalizeRoom(roomSnapshot.val());
+  if (!room) {
+    throw new Error('房間資料格式異常，無法刪除。');
+  }
+
+  const updates: Record<string, OnlineRoom | null> = {
+    [`rooms/${normalizedRoomId}`]: null,
+    [`roomPresence/${normalizedRoomId}`]: null,
+  };
+
+  await removeSessionUpdateIfMatches(updates, normalizedRoomId, room.hostUid);
+  await removeSessionUpdateIfMatches(updates, normalizedRoomId, room.guestUid);
+  await update(ref(db), updates);
+}
+
+export async function adminDeleteAllRooms(roomIds: string[], userIds: string[] = []) {
+  requireConfiguredFirebase();
+  const db = requireDatabase();
+  await ensureAnonymousAuth();
+
+  const updates: Record<string, null> = {};
+  roomIds.forEach((roomId) => {
+    const normalizedRoomId = roomId.trim().toUpperCase();
+    if (normalizedRoomId) {
+      updates[`rooms/${normalizedRoomId}`] = null;
+      updates[`roomPresence/${normalizedRoomId}`] = null;
+    }
+  });
+
+  userIds.forEach((userId) => {
+    const normalizedUserId = userId.trim();
+    if (normalizedUserId) {
+      updates[`userSessions/${normalizedUserId}`] = null;
+    }
+  });
+
+  await update(ref(db), updates);
+}
+
+export async function adminDeleteUser(userId: string) {
+  requireConfiguredFirebase();
+  const db = requireDatabase();
+  await ensureAnonymousAuth();
+
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
+    throw new Error('請提供欲移除的 Firebase UID。');
+  }
+
+  const sessionRef = ref(db, `userSessions/${normalizedUserId}`);
+  const sessionSnapshot = await get(sessionRef);
+  const roomId = sessionSnapshot.exists()
+    ? String(sessionSnapshot.child('roomId').val() || '')
+    : '';
+
+  const updates: Record<string, OnlineRoom | null> = {
+    [`userSessions/${normalizedUserId}`]: null,
+  };
+
+  if (!roomId) {
+    await update(ref(db), updates);
+    return;
+  }
+
+  updates[`roomPresence/${roomId}/${normalizedUserId}`] = null;
+
+  const roomSnapshot = await get(ref(db, `rooms/${roomId}`));
+  if (!roomSnapshot.exists()) {
+    await update(ref(db), updates);
+    return;
+  }
+
+  const room = normalizeRoom(roomSnapshot.val());
+  if (!room) {
+    await update(ref(db), updates);
+    return;
+  }
+
+  if (room.hostUid === normalizedUserId && !room.guestUid) {
+    updates[`rooms/${roomId}`] = null;
+    updates[`roomPresence/${roomId}`] = null;
+    await update(ref(db), updates);
+    return;
+  }
+
+  const remainingUid = room.hostUid === normalizedUserId ? room.guestUid : room.hostUid;
+  const remainingColor = remainingUid ? room.playerColors[remainingUid] ?? null : null;
+
+  updates[`rooms/${roomId}`] = {
+    ...room,
+    status: 'abandoned',
+    phase: 'gameOver',
+    winner: remainingColor,
+    activePlayerUid: null,
+    updatedAt: Date.now(),
+    message: '連線玩家已被管理員移除',
+  };
+
+  await update(ref(db), updates);
 }
 
 export async function readRoom(roomId: string) {

@@ -32,6 +32,7 @@ const missingKeys = Object.entries(requiredConfig)
 
 export const isFirebaseConfigured = missingKeys.length === 0;
 export const isAppCheckEnabled = import.meta.env.VITE_ENABLE_APPCHECK === 'true';
+export const appCheckDebugTokenStorageKey = 'FIREBASE_APPCHECK_DEBUG_TOKEN';
 
 let firebaseApp: FirebaseApp | null = null;
 let auth: Auth | null = null;
@@ -92,6 +93,28 @@ function resolveDebugToken(value: string | undefined): boolean | string | undefi
   return value;
 }
 
+function readStoredDebugToken() {
+  if (typeof window === 'undefined') {
+    return undefined;
+  }
+
+  try {
+    return window.localStorage.getItem(appCheckDebugTokenStorageKey) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveConfiguredDebugToken() {
+  return resolveDebugToken(
+    import.meta.env.VITE_FIREBASE_APPCHECK_DEBUG_TOKEN ?? readStoredDebugToken(),
+  );
+}
+
+export function hasConfiguredAppCheckDebugToken() {
+  return resolveConfiguredDebugToken() !== undefined;
+}
+
 function initializeFirebaseAppCheck() {
   if (!isFirebaseConfigured || !isAppCheckEnabled || appCheckInstance) {
     return;
@@ -99,9 +122,7 @@ function initializeFirebaseAppCheck() {
 
   const app = getOrCreateFirebaseApp();
   const siteKey = import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY;
-  const debugToken = resolveDebugToken(
-    import.meta.env.VITE_FIREBASE_APPCHECK_DEBUG_TOKEN,
-  );
+  const debugToken = resolveConfiguredDebugToken();
 
   if (!app || !siteKey) {
     return;
