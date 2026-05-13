@@ -1,73 +1,47 @@
-# React + TypeScript + Vite
+# CChess Client
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+`client/` 是中國象棋前端，包含：
 
-Currently, two official plugins are available:
+- 單機明棋
+- 單機暗棋
+- 雙人連線明棋
+- 雙人連線暗棋
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 開發命令
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run dev
+npm run lint
+npm run build
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 連線模式依賴
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- Firebase Anonymous Auth
+- Firebase Realtime Database
+- Firebase App Check
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+公開站只提供遊戲功能，不提供管理介面。
+
+## 目前連線模式現況
+
+- 房號為 **5 碼純數字**
+- 對局結束後可選擇繼續遊戲或返回主選單
+- 明棋連線視角會依玩家身份翻面：
+  - 紅方在下
+  - 黑方在下
+- 連線房間資訊欄已縮窄，保留較大棋盤顯示空間
+
+## 環境變數注意事項
+
+- `client/.env` 只供本機使用
+- 不要把 App Check debug token 放入公開站建置流程
+- 正式站應使用：
+  - `VITE_FIREBASE_APPCHECK_SITE_KEY`
+- 本機管理頁不走 `client` bundle，而是由 `local-admin/` 另外讀取設定
+
+## 目前限制
+
+- 連線規則驗證仍以 client-side engine + transaction 為主
+- 尚未完成完整斷線重連 / 身份 reclaim
+- 尚未完成連線版規則回歸測試自動化

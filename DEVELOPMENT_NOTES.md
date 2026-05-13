@@ -20,6 +20,70 @@
 
 ---
 
+## v0.6.3 目前狀態整理版 (2026-05-13)
+
+### 目前已完成
+
+- 雙人連線明棋 / 暗棋都已可在 Firebase Spark 方案下運作
+- 匿名登入、Realtime Database 房間同步、App Check 已整合
+- 房號改為 **5 碼純數字**
+- 對局結束後可選擇：
+  - 繼續遊戲
+  - 返回主選單
+- 明棋 / 暗棋的連線房間版面已調整為：
+  - 左側資訊欄較窄
+  - 棋盤顯示區更大
+- 明棋連線視角已依玩家身份翻轉：
+  - 紅方看到紅方在下
+  - 黑方看到黑方在下
+- 公開 GitHub Pages 站台已移除 `/admin`
+- 管理工具改為 **本機專用** `local-admin/`
+
+### 管理工具現況
+
+- 管理介面只在本機使用：
+  - `http://127.0.0.1:5179/admin`
+- `local-admin/` 會讀取：
+  - `client/.env`
+  - `local-admin/appcheck-debug-token.json`
+- 管理頁不再輸入 debug token
+- App Check debug token 由 Firebase SDK 真正的 debug provider 使用
+- 管理刪除權限改由 Realtime Database 規則控制：
+  - `admins/{uid} = true`
+
+### 目前要特別注意
+
+- **公開站沒有管理介面**，GitHub Pages 上不應再期待 `/admin`
+- `local-admin/` 已在 `.gitignore` 中排除，不會上傳 GitHub
+- `local-admin/appcheck-debug-token.json` 屬於本機敏感資料，應只保留在管理機器上
+- 連線規則驗證目前仍以 Realtime Database transaction + client-side engine 為主
+- 若未來要進一步強化作弊防護，仍需要重新評估受信任後端方案
+
+### 本機管理頁操作摘要
+
+1. 啟動：
+   - `node local-admin/server.mjs`
+2. 開啟：
+   - `http://127.0.0.1:5179/admin`
+3. App Check：
+   - 在 Firebase Console 的 App Check 為 Web App 註冊 debug token
+4. 管理權限：
+   - 在 Realtime Database 設定 `admins/{uid} = true`
+
+### 目前驗證過的項目
+
+- `client`：
+  - `npm run lint`
+  - `npm run build`
+- `functions`：
+  - `npm run build`
+- Firebase：
+  - Realtime Database rules deploy 成功
+- GitHub Pages：
+  - 自動部署正常
+
+---
+
 ## v0.6.1 Firebase Spark 方案調整版 (2026-05-13)
 
 ### 調整目標
@@ -34,31 +98,38 @@
   - Firebase App Check
   - Realtime Database 房間同步
   - 雙人明棋 / 暗棋
-  - 管理監看頁
+  - 本機管理工具 (`local-admin/`)
 - 移除：
   - 前端對 Callable Functions 的呼叫
-  - 透過網頁直接刪除房間 / 刪除用戶的功能
+  - 公開站上的 `/admin` 管理入口
   - `firebase deploy` 內的 Functions 部署設定
 
 ### Spark 方案下的管理方式
 
-- `/admin` 改為監看用途：
+- 使用本機管理頁：
+  - `node local-admin/server.mjs`
+  - `http://127.0.0.1:5179/admin`
+- 管理頁可：
   - 查看目前房間
   - 查看目前連線用戶
-  - 顯示對應的 Realtime Database 路徑
-- 若需刪除資料，請直接在 Firebase Console 的 Realtime Database 手動刪除：
-  - `rooms/{roomId}`
-  - `roomPresence/{roomId}`
-  - `userSessions/{uid}`
+  - 刪除房間
+  - 刪除用戶
+  - 一鍵刪除所有房間
+- 刪除權限需依賴：
+  - App Check debug token
+  - `admins/{uid} = true`
 
-### 為何不保留前端刪除按鈕
+### 為何不保留公開站前端刪除按鈕
 
-- 在沒有 Cloud Functions 或其他受信任後端的前提下，無法安全驗證「管理者 debug token」
-- 若把 token 驗證放在前端，實際上會把管理能力暴露到瀏覽器 bundle 內，不適合正式部署
+- 公開站若保留管理刪除功能，會把管理邏輯暴露到正式 bundle
+- 因此管理介面移到 `local-admin/`，只在本機端開啟
+- 本機仍使用 Firebase SDK + Database Rules 控制權限，不再經由網頁手動輸入 token
 
 ---
 
 ## v0.6.0 Firebase 雙人連線版 (2026-05-13)
+
+> 以下為當時版本的階段性紀錄。若與目前行為衝突，請以 `v0.6.3 目前狀態整理版` 為準。
 
 ### 已新增功能
 
@@ -72,7 +143,7 @@
   - 建立房間
   - 加入房間
   - 離開房間
-  - 房號 6 碼配對
+  - 房號配對（目前正式版本已調整為 5 碼純數字）
   - 房間 presence / user session 同步
 
 #### 雙人明棋
@@ -93,8 +164,8 @@
   - 兵吃將：允許 / 不允許
 
 #### 管理介面
-- 新增 `/admin` 管理頁
-- 可即時查看目前房間與目前連線用戶
+- 初期曾新增公開 `/admin` 管理頁
+- 後續已改為本機 `local-admin/` 管理工具
 
 #### Firebase 專案檔
 - `firebase.json`
