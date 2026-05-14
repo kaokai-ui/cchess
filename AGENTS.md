@@ -38,6 +38,8 @@ android/      # Capacitor Android project
 | 暗棋 (Dark chess) | ✓ (AI) | ✓ (Firebase) |
 
 - AI difficulties: `easy` | `normal` | `hard` | `master` (棋聖)
+- Solo AI default difficulty: `hard` for both Bright chess and Dark chess
+- Dark chess solo AI may resign in late endgames when no unrevealed pieces remain and it has no realistic winning line
 - Dark chess has configurable rules (e.g., rook capture range, cannon capture rule)
 
 ## Commands (once initialized)

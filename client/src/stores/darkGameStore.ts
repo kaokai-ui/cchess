@@ -13,7 +13,7 @@ import {
   checkWinner,
   checkStalemate,
 } from '../shared/dark-chess/engine';
-import { getAIMove } from '../shared/dark-chess/ai';
+import { getAIMove, shouldAISurrender } from '../shared/dark-chess/ai';
 import { playMoveSound, playCaptureSound, playFlipSound, playWinSound, playLoseSound } from '../utils/sound';
 
 export type AIDifficulty = 'easy' | 'normal' | 'hard' | 'master';
@@ -350,6 +350,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const state = get();
       if (state.phase !== 'playing') return;
       if (state.currentPlayer !== aiColor) return;
+
+      if (shouldAISurrender(state.board, aiColor)) {
+        set({
+          phase: 'gameOver',
+          winner: state.playerColor!,
+          isAiThinking: false,
+          message: 'AI 無勝算，主動認輸。',
+        });
+        return;
+      }
 
       const aiMove = getAIMove(state.board, aiColor, state.aiDifficulty);
 

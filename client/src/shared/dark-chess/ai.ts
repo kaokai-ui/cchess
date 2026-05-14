@@ -5,10 +5,12 @@ import type {
   Position,
 } from '../types';
 import {
+  canCapture,
   getValidMoves,
   getValidFlips,
   movePiece,
   countPieces,
+  countUnrevealed,
   checkWinner,
 } from './engine';
 
@@ -49,6 +51,11 @@ interface ScoredMove {
   move: AIMove;
   score: number;
   priority: number;
+}
+
+interface RevealedPieceState {
+  piece: Piece;
+  pos: Position;
 }
 
 function otherColor(color: PieceColor): PieceColor {
@@ -104,6 +111,64 @@ function getRevealedMoveCandidates(
   }
 
   return results;
+}
+
+function getRevealedPieces(
+  board: Board,
+  color: PieceColor,
+): RevealedPieceState[] {
+  const results: RevealedPieceState[] = [];
+
+  for (let row = 0; row < ROWS; row += 1) {
+    for (let col = 0; col < COLS; col += 1) {
+      const cell = board[row][col];
+      if (cell && cell.revealed && cell.color === color) {
+        results.push({
+          piece: cell,
+          pos: { row, col },
+        });
+      }
+    }
+  }
+
+  return results;
+}
+
+function hasAnyCaptureMove(board: Board, color: PieceColor): boolean {
+  return getRevealedMoveCandidates(board, color)
+    .some((candidate) => candidate.capturedPiece !== null);
+}
+
+function hasUncapturableOpponentPiece(board: Board, aiColor: PieceColor): boolean {
+  const aiPieces = getRevealedPieces(board, aiColor);
+  const opponentPieces = getRevealedPieces(board, otherColor(aiColor));
+
+  return opponentPieces.some(({ piece: targetPiece }) => (
+    aiPieces.every(({ piece: attackerPiece }) => !canCapture(attackerPiece, targetPiece))
+  ));
+}
+
+export function shouldAISurrender(board: Board, aiColor: PieceColor): boolean {
+  if (countUnrevealed(board) > 0) {
+    return false;
+  }
+
+  const aiPieceCount = countPieces(board, aiColor);
+  const opponentPieceCount = countPieces(board, otherColor(aiColor));
+
+  if (aiPieceCount === 0 || aiPieceCount > 2) {
+    return false;
+  }
+
+  if (opponentPieceCount === 0) {
+    return false;
+  }
+
+  if (hasAnyCaptureMove(board, aiColor)) {
+    return false;
+  }
+
+  return hasUncapturableOpponentPiece(board, aiColor);
 }
 
 function countMobility(board: Board, color: PieceColor): number {
