@@ -67,7 +67,7 @@ const AI_TURN_THINK_DELAY_MS = 500;
 const AI_ACTION_SETTLE_DELAY_MS = 800;
 const AI_FLIP_ACTION_DELAY_MS = {
   standard: 850,
-  elder: 1500,
+  elder: 3500,
 } as const;
 
 let flipCueTimer: ReturnType<typeof setTimeout> | null = null;

@@ -34,7 +34,7 @@ const DEFAULT_UI: UISettings = {
   largeFont: false,
   soundEnabled: true,
   flipRevealCueEnabled: true,
-  darkAiFlipPace: 'standard',
+  darkAiFlipPace: 'elder',
 };
 
 export const useSettingsStore = create<SettingsStore>()(
