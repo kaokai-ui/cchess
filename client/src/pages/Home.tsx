@@ -13,7 +13,7 @@ const Home: React.FC = () => {
   const navigate = useNavigate();
   const [playMode, setPlayMode] = useState<'solo' | 'online'>('solo');
   const [gameMode, setGameMode] = useState<'bright' | 'dark'>('dark');
-  const [difficulty, setDifficulty] = useState<AIDifficulty>('normal');
+  const [difficulty, setDifficulty] = useState<AIDifficulty>('hard');
   const [anonymousReady, setAnonymousReady] = useState(false);
 
   const firebaseReady =

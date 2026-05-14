@@ -99,7 +99,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   aiColor: null,
   isFlippingFirst: true,
   lastMove: null,
-  aiDifficulty: 'normal',
+  aiDifficulty: 'hard',
   isAiThinking: false,
   message: '翻開第一顆棋子決定顏色',
   history: [],

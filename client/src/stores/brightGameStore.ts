@@ -62,7 +62,7 @@ export const useBrightGameStore = create<GameStore>((set, get) => ({
   winner: null,
   playerColor: 'red',
   lastMove: null,
-  aiDifficulty: 'normal',
+  aiDifficulty: 'hard',
   isAiThinking: false,
   message: '紅方先行',
   history: [],
