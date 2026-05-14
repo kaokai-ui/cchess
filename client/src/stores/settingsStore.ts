@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 
 export interface DarkChessSettings {
   rookCaptureRange: 'adjacent' | 'fullLine';
@@ -6,10 +7,13 @@ export interface DarkChessSettings {
   soldierKillGeneral: boolean;
 }
 
+export type AITurnPace = 'standard' | 'elder';
+
 export interface UISettings {
   largeFont: boolean;
   soundEnabled: boolean;
   flipRevealCueEnabled: boolean;
+  darkAiFlipPace: AITurnPace;
 }
 
 interface SettingsStore {
@@ -30,28 +34,37 @@ const DEFAULT_UI: UISettings = {
   largeFont: false,
   soundEnabled: true,
   flipRevealCueEnabled: true,
+  darkAiFlipPace: 'standard',
 };
 
-export const useSettingsStore = create<SettingsStore>((set) => ({
-  darkChess: { ...DEFAULT_DARK_CHESS },
-  ui: { ...DEFAULT_UI },
-
-  setDarkChessSetting: (key, value) => {
-    set((state) => ({
-      darkChess: { ...state.darkChess, [key]: value },
-    }));
-  },
-
-  setUISetting: (key, value) => {
-    set((state) => ({
-      ui: { ...state.ui, [key]: value },
-    }));
-  },
-
-  resetToDefaults: () => {
-    set({
+export const useSettingsStore = create<SettingsStore>()(
+  persist(
+    (set) => ({
       darkChess: { ...DEFAULT_DARK_CHESS },
       ui: { ...DEFAULT_UI },
-    });
-  },
-}));
+
+      setDarkChessSetting: (key, value) => {
+        set((state) => ({
+          darkChess: { ...state.darkChess, [key]: value },
+        }));
+      },
+
+      setUISetting: (key, value) => {
+        set((state) => ({
+          ui: { ...state.ui, [key]: value },
+        }));
+      },
+
+      resetToDefaults: () => {
+        set({
+          darkChess: { ...DEFAULT_DARK_CHESS },
+          ui: { ...DEFAULT_UI },
+        });
+      },
+    }),
+    {
+      name: 'cchess-settings',
+      storage: createJSONStorage(() => localStorage),
+    },
+  ),
+);

@@ -199,6 +199,34 @@ const Settings: React.FC = () => {
                 </button>
               </div>
             </div>
+
+            <div className="mb-4">
+              <label className="block text-base font-semibold text-gray-700 mb-2">
+                AI 翻牌速度
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  className={`py-3 px-4 rounded-lg text-base font-semibold transition-all ${
+                    ui.darkAiFlipPace === 'standard'
+                      ? 'bg-amber-600 text-white shadow-md'
+                      : 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                  }`}
+                  onClick={() => setUISetting('darkAiFlipPace', 'standard')}
+                >
+                  標準慢
+                </button>
+                <button
+                  className={`py-3 px-4 rounded-lg text-base font-semibold transition-all ${
+                    ui.darkAiFlipPace === 'elder'
+                      ? 'bg-amber-600 text-white shadow-md'
+                      : 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                  }`}
+                  onClick={() => setUISetting('darkAiFlipPace', 'elder')}
+                >
+                  長輩更慢
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Reset Button */}
