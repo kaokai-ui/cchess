@@ -148,27 +148,9 @@ function hasUncapturableOpponentPiece(board: Board, aiColor: PieceColor): boolea
   ));
 }
 
-export function shouldAISurrender(board: Board, aiColor: PieceColor): boolean {
-  if (countUnrevealed(board) > 0) {
-    return false;
-  }
-
-  const aiPieceCount = countPieces(board, aiColor);
-  const opponentPieceCount = countPieces(board, otherColor(aiColor));
-
-  if (aiPieceCount === 0 || aiPieceCount > 2) {
-    return false;
-  }
-
-  if (opponentPieceCount === 0) {
-    return false;
-  }
-
-  if (hasAnyCaptureMove(board, aiColor)) {
-    return false;
-  }
-
-  return hasUncapturableOpponentPiece(board, aiColor);
+function getMaterialValue(board: Board, color: PieceColor): number {
+  return getRevealedPieces(board, color)
+    .reduce((total, { piece }) => total + PIECE_VALUES[piece.type], 0);
 }
 
 function countMobility(board: Board, color: PieceColor): number {
@@ -363,6 +345,52 @@ function minimax(
     }
   }
   return minEval;
+}
+
+export function shouldAISurrender(board: Board, aiColor: PieceColor): boolean {
+  if (countUnrevealed(board) > 0) {
+    return false;
+  }
+
+  const opponentColor = otherColor(aiColor);
+  const aiPieceCount = countPieces(board, aiColor);
+  const opponentPieceCount = countPieces(board, opponentColor);
+
+  if (aiPieceCount === 0 || aiPieceCount > 2 || opponentPieceCount === 0) {
+    return false;
+  }
+
+  if (hasAnyCaptureMove(board, aiColor)) {
+    return false;
+  }
+
+  const materialGap = getMaterialValue(board, opponentColor) - getMaterialValue(board, aiColor);
+  const moveCandidates = getRevealedMoveCandidates(board, aiColor);
+
+  // Absolute dead position: the AI cannot ever capture at least one remaining
+  // enemy piece with any of its surviving piece types.
+  if (hasUncapturableOpponentPiece(board, aiColor)) {
+    return true;
+  }
+
+  if (moveCandidates.length === 0) {
+    return materialGap > 0;
+  }
+
+  const bestContinuation = Math.max(
+    ...moveCandidates.map((candidate) => (
+      minimax(candidate.newBoard, 1, false, aiColor, -Infinity, Infinity) +
+      scoreMoveHeuristics(board, candidate, aiColor) * 0.5
+    )),
+  );
+
+  const opponentHasCapturePressure = hasAnyCaptureMove(board, opponentColor);
+
+  return (
+    materialGap >= 45 &&
+    bestContinuation <= -45 &&
+    (opponentHasCapturePressure || aiPieceCount === 1)
+  );
 }
 
 export function getAIMove(
