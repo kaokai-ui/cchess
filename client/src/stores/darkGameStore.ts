@@ -44,6 +44,7 @@ interface GameStore {
   message: string;
   history: MoveRecord[];
   historyIndex: number;
+  flipCue: Position | null;
 
   initGame: (difficulty: AIDifficulty) => void;
   selectCell: (pos: Position) => void;
@@ -59,6 +60,33 @@ interface GameStore {
 
 const emptyBoard = (): Board =>
   Array.from({ length: 4 }, () => Array(8).fill(null));
+
+const FLIP_CUE_DURATION_MS = 700;
+
+let flipCueTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearFlipCueTimer() {
+  if (flipCueTimer) {
+    clearTimeout(flipCueTimer);
+    flipCueTimer = null;
+  }
+}
+
+function scheduleFlipCue(
+  set: (partial: Partial<GameStore>) => void,
+  get: () => GameStore,
+  pos: Position,
+) {
+  clearFlipCueTimer();
+  set({ flipCue: pos });
+  flipCueTimer = setTimeout(() => {
+    const cue = get().flipCue;
+    if (cue && cue.row === pos.row && cue.col === pos.col) {
+      set({ flipCue: null });
+    }
+    flipCueTimer = null;
+  }, FLIP_CUE_DURATION_MS);
+}
 
 export const useGameStore = create<GameStore>((set, get) => ({
   board: emptyBoard(),
@@ -76,9 +104,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
   message: '翻開第一顆棋子決定顏色',
   history: [],
   historyIndex: -1,
+  flipCue: null,
 
   initGame: (difficulty: AIDifficulty) => {
     const board = createInitialBoard();
+    clearFlipCueTimer();
     set({
       board,
       currentPlayer: 'red',
@@ -95,6 +125,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       message: '翻開第一顆棋子決定顏色',
       history: [],
       historyIndex: -1,
+      flipCue: null,
     });
   },
 
@@ -334,6 +365,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
 
       if (aiMove.type === 'flip' && aiMove.pos) {
+        scheduleFlipCue(set, get, aiMove.pos);
         state.executeFlip(aiMove.pos);
       } else if (aiMove.type === 'move' && aiMove.from && aiMove.to) {
         state.selectCell(aiMove.from);
@@ -355,6 +387,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   leaveGame: () => {
+    clearFlipCueTimer();
     set({
       board: emptyBoard(),
       currentPlayer: 'red',
@@ -370,6 +403,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       message: '',
       history: [],
       historyIndex: -1,
+      flipCue: null,
     });
   },
 
@@ -378,6 +412,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (historyIndex < 0) return;
 
     const prevState = history[historyIndex];
+    clearFlipCueTimer();
     set({
       board: prevState.board,
       currentPlayer: prevState.currentPlayer,
@@ -392,6 +427,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       phase: 'playing',
       winner: null,
       isAiThinking: false,
+      flipCue: null,
     });
 
     if (!prevState.isFlippingFirst && prevState.currentPlayer === get().aiColor) {

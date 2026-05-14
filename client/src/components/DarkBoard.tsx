@@ -7,6 +7,7 @@ interface DarkBoardProps {
   selectedCell: Position | null;
   validMoves: Position[];
   lastMove: { from: Position; to: Position } | null;
+  flipCue: Position | null;
   onCellClick: (pos: Position) => void;
 }
 
@@ -15,6 +16,7 @@ const DarkBoard: React.FC<DarkBoardProps> = ({
   selectedCell,
   validMoves,
   lastMove,
+  flipCue,
   onCellClick,
 }) => {
   const isSelected = (row: number, col: number) =>
@@ -31,6 +33,11 @@ const DarkBoard: React.FC<DarkBoardProps> = ({
     lastMove.to !== undefined &&
     lastMove.to.row === row &&
     lastMove.to.col === col;
+
+  const isFlipCueTarget = (row: number, col: number) =>
+    flipCue !== null &&
+    flipCue.row === row &&
+    flipCue.col === col;
 
   return (
     <div className="w-full max-w-4xl xl:max-w-[72rem] mx-auto p-1 sm:p-2">
@@ -55,6 +62,7 @@ const DarkBoard: React.FC<DarkBoardProps> = ({
                       isSelected={isSelected(rowIdx, colIdx)}
                       isValidMove={isValidMove(rowIdx, colIdx)}
                       isLastMove={isLastMoveTarget(rowIdx, colIdx)}
+                      showFlipCue={isFlipCueTarget(rowIdx, colIdx)}
                       onClick={() => onCellClick({ row: rowIdx, col: colIdx })}
                     />
                   </div>

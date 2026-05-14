@@ -27,9 +27,94 @@ body {
   max-width: min(100%, calc((100dvh - 1.5rem) * 0.84), 980px);
 }
 
+.dark-piece-flip-glow {
+  animation: dark-piece-flip-glow 1s ease-out;
+}
+
+.dark-flip-cue__hand {
+  position: absolute;
+  inset: -8%;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  animation: dark-flip-hand-tap 650ms ease-out forwards;
+}
+
+.dark-flip-cue__cover {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  border-radius: 9999px;
+  border: 2px solid #3e2723;
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 248, 225, 0.18), transparent 28%),
+    linear-gradient(135deg, #6d4c41 0%, #4e342e 52%, #2f1d19 100%);
+  box-shadow:
+    inset 0 1px 3px rgba(255, 248, 225, 0.16),
+    0 4px 8px rgba(0, 0, 0, 0.32);
+  transform-origin: center;
+  backface-visibility: hidden;
+  animation: dark-piece-reveal 650ms cubic-bezier(0.22, 0.8, 0.22, 1) forwards;
+}
+
 @media (pointer: coarse) and (orientation: landscape) and (min-width: 768px) and (max-width: 1366px) {
   .bright-board-shell {
     max-width: min(100%, calc((100dvh - 1rem) * 0.95), 1080px);
+  }
+}
+
+@keyframes dark-flip-hand-tap {
+  0% {
+    opacity: 0;
+    transform: translateY(-18%) scale(0.76);
+  }
+
+  18% {
+    opacity: 1;
+  }
+
+  58% {
+    opacity: 1;
+    transform: translateY(2%) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(10%) scale(0.94);
+  }
+}
+
+@keyframes dark-piece-reveal {
+  0% {
+    opacity: 1;
+    transform: rotateY(0deg) scale(1);
+  }
+
+  54% {
+    opacity: 1;
+    transform: rotateY(0deg) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: rotateY(88deg) scale(0.92);
+  }
+}
+
+@keyframes dark-piece-flip-glow {
+  0% {
+    box-shadow: 0 0 0 rgba(255, 213, 79, 0);
+  }
+
+  38% {
+    box-shadow: 0 0 0.9rem rgba(255, 213, 79, 0.45);
+  }
+
+  100% {
+    box-shadow: 0 0 0 rgba(255, 213, 79, 0);
   }
 }
 

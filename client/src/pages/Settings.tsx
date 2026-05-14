@@ -171,6 +171,34 @@ const Settings: React.FC = () => {
                 </button>
               </div>
             </div>
+
+            <div className="mb-4">
+              <label className="block text-base font-semibold text-gray-700 mb-2">
+                翻牌提示動畫
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  className={`py-3 px-4 rounded-lg text-base font-semibold transition-all ${
+                    ui.flipRevealCueEnabled
+                      ? 'bg-amber-600 text-white shadow-md'
+                      : 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                  }`}
+                  onClick={() => setUISetting('flipRevealCueEnabled', true)}
+                >
+                  開啟
+                </button>
+                <button
+                  className={`py-3 px-4 rounded-lg text-base font-semibold transition-all ${
+                    !ui.flipRevealCueEnabled
+                      ? 'bg-amber-600 text-white shadow-md'
+                      : 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                  }`}
+                  onClick={() => setUISetting('flipRevealCueEnabled', false)}
+                >
+                  關閉
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Reset Button */}

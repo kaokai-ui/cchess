@@ -9,6 +9,7 @@ export interface DarkChessSettings {
 export interface UISettings {
   largeFont: boolean;
   soundEnabled: boolean;
+  flipRevealCueEnabled: boolean;
 }
 
 interface SettingsStore {
@@ -28,6 +29,7 @@ const DEFAULT_DARK_CHESS: DarkChessSettings = {
 const DEFAULT_UI: UISettings = {
   largeFont: false,
   soundEnabled: true,
+  flipRevealCueEnabled: true,
 };
 
 export const useSettingsStore = create<SettingsStore>((set) => ({

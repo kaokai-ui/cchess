@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import DarkBoard from '../components/DarkBoard';
 import { ensureAnonymousAuth } from '../firebase/app';
@@ -14,8 +14,65 @@ import {
   submitDarkMove,
   subscribeToOnlineRoom,
 } from '../online/service';
+import { useSettingsStore } from '../stores/settingsStore';
 import type { OnlineRoom, PresenceSnapshot } from '../online/types';
 import type { Position } from '../shared/types';
+
+const FLIP_CUE_DURATION_MS = 700;
+
+function isSamePosition(left: Position | null, right: Position | null) {
+  return (
+    left !== null &&
+    right !== null &&
+    left.row === right.row &&
+    left.col === right.col
+  );
+}
+
+function findRemoteFlipPosition(
+  previousRoom: OnlineRoom | null,
+  nextRoom: OnlineRoom | null,
+  myUid: string,
+): Position | null {
+  if (!previousRoom || !nextRoom || !myUid) {
+    return null;
+  }
+
+  if (previousRoom.variant !== 'dark' || nextRoom.variant !== 'dark') {
+    return null;
+  }
+
+  if (previousRoom.activePlayerUid === null || previousRoom.activePlayerUid === myUid) {
+    return null;
+  }
+
+  let flipPosition: Position | null = null;
+
+  for (let row = 0; row < previousRoom.board.length; row += 1) {
+    for (let col = 0; col < previousRoom.board[row].length; col += 1) {
+      const previousCell = previousRoom.board[row][col];
+      const nextCell = nextRoom.board[row]?.[col];
+
+      const isFreshReveal =
+        previousCell !== null &&
+        nextCell !== null &&
+        previousCell.revealed === false &&
+        nextCell.revealed === true &&
+        previousCell.type === nextCell.type &&
+        previousCell.color === nextCell.color;
+
+      if (isFreshReveal) {
+        if (flipPosition) {
+          return null;
+        }
+
+        flipPosition = { row, col };
+      }
+    }
+  }
+
+  return flipPosition;
+}
 
 function getColorLabel(color: 'red' | 'black' | null) {
   if (color === 'red') {
@@ -43,13 +100,19 @@ function getConnectionLabel(
 const OnlineDarkGame: React.FC = () => {
   const navigate = useNavigate();
   const { roomId = '' } = useParams();
+  const flipRevealCueEnabled = useSettingsStore(
+    (state) => state.ui.flipRevealCueEnabled,
+  );
   const [room, setRoom] = useState<OnlineRoom | null>(null);
   const [presence, setPresence] = useState<Record<string, PresenceSnapshot>>({});
   const [myUid, setMyUid] = useState('');
   const [selectedCell, setSelectedCell] = useState<Position | null>(null);
+  const [flipCue, setFlipCue] = useState<Position | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(true);
   const [restarting, setRestarting] = useState(false);
+  const previousRoomRef = useRef<OnlineRoom | null>(null);
+  const flipCueTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -92,6 +155,39 @@ const OnlineDarkGame: React.FC = () => {
       unsubscribe();
     };
   }, [roomId]);
+
+  useEffect(() => {
+    if (!flipRevealCueEnabled) {
+      setFlipCue(null);
+    }
+  }, [flipRevealCueEnabled]);
+
+  useEffect(() => {
+    const remoteFlip = findRemoteFlipPosition(previousRoomRef.current, room, myUid);
+    previousRoomRef.current = room;
+
+    if (!flipRevealCueEnabled || !remoteFlip) {
+      return;
+    }
+
+    if (flipCueTimerRef.current) {
+      clearTimeout(flipCueTimerRef.current);
+    }
+
+    setFlipCue(remoteFlip);
+    flipCueTimerRef.current = setTimeout(() => {
+      setFlipCue((currentCue) => (isSamePosition(currentCue, remoteFlip) ? null : currentCue));
+      flipCueTimerRef.current = null;
+    }, FLIP_CUE_DURATION_MS);
+  }, [flipRevealCueEnabled, myUid, room]);
+
+  useEffect(() => {
+    return () => {
+      if (flipCueTimerRef.current) {
+        clearTimeout(flipCueTimerRef.current);
+      }
+    };
+  }, []);
 
   const activeSelection = useMemo(() => {
     if (!room || !selectedCell) {
@@ -294,6 +390,7 @@ const OnlineDarkGame: React.FC = () => {
             selectedCell={activeSelection}
             validMoves={validMoves}
             lastMove={room.lastMove}
+            flipCue={flipRevealCueEnabled ? flipCue : null}
             onCellClick={(pos) => void handleCellClick(pos)}
           />
         </main>

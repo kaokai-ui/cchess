@@ -42,6 +42,13 @@ android/      # Capacitor Android project
 
 ## Commands (once initialized)
 
+### RTK / PowerShell Rule
+
+- On this machine, `rtk` only proxies external programs.
+- `rtk` does **not** execute PowerShell cmdlets directly, so commands like `rtk Get-Content ...` will fail.
+- When a command needs a PowerShell cmdlet, use `rtk proxy powershell -NoProfile -Command "..."`.
+- Example: `rtk proxy powershell -NoProfile -Command "Get-Content -Raw 'D:\\Game\\CChess\\AGENTS.md'"`
+
 ```bash
 # Initialize project (run once)
 npm create vite@latest client -- --template react-ts

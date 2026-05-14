@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useGameStore } from '../stores/darkGameStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import DarkBoard from '../components/DarkBoard';
 import type { AIDifficulty } from '../stores/darkGameStore';
 
@@ -8,6 +9,9 @@ const DarkGame: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { difficulty } = location.state as { difficulty: AIDifficulty };
+  const flipRevealCueEnabled = useSettingsStore(
+    (state) => state.ui.flipRevealCueEnabled,
+  );
 
   const {
     board,
@@ -19,6 +23,7 @@ const DarkGame: React.FC = () => {
     playerColor,
     isFlippingFirst,
     lastMove,
+    flipCue,
     isAiThinking,
     message,
     initGame,
@@ -96,6 +101,7 @@ const DarkGame: React.FC = () => {
           selectedCell={selectedCell}
           validMoves={validMoves}
           lastMove={lastMove}
+          flipCue={flipRevealCueEnabled ? flipCue : null}
           onCellClick={handleCellClick}
         />
       </div>
