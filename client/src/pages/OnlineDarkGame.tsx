@@ -391,6 +391,7 @@ const OnlineDarkGame: React.FC = () => {
             validMoves={validMoves}
             lastMove={room.lastMove}
             flipCue={flipRevealCueEnabled ? flipCue : null}
+            flipCueDurationMs={FLIP_CUE_DURATION_MS}
             onCellClick={(pos) => void handleCellClick(pos)}
           />
         </main>

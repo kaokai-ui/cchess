@@ -62,12 +62,12 @@ interface GameStore {
 const emptyBoard = (): Board =>
   Array.from({ length: 4 }, () => Array(8).fill(null));
 
-const FLIP_CUE_DURATION_MS = 700;
 const AI_TURN_THINK_DELAY_MS = 500;
 const AI_ACTION_SETTLE_DELAY_MS = 800;
-const AI_FLIP_ACTION_DELAY_MS = {
-  standard: 850,
-  elder: 3500,
+const AI_FLIP_ACTION_DELAY_MS = 850;
+const DARK_AI_FLIP_CUE_DURATION_MS = {
+  standard: 700,
+  elder: 2000,
 } as const;
 
 let flipCueTimer: ReturnType<typeof setTimeout> | null = null;
@@ -83,6 +83,7 @@ function scheduleFlipCue(
   set: (partial: Partial<GameStore>) => void,
   get: () => GameStore,
   pos: Position,
+  durationMs: number,
 ) {
   clearFlipCueTimer();
   set({ flipCue: pos });
@@ -92,12 +93,12 @@ function scheduleFlipCue(
       set({ flipCue: null });
     }
     flipCueTimer = null;
-  }, FLIP_CUE_DURATION_MS);
+  }, durationMs);
 }
 
-function getAiFlipActionDelayMs() {
+function getDarkAiFlipCueDurationMs() {
   const pace = useSettingsStore.getState().ui.darkAiFlipPace;
-  return AI_FLIP_ACTION_DELAY_MS[pace];
+  return DARK_AI_FLIP_CUE_DURATION_MS[pace];
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -374,7 +375,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
 
       const aiMove = getAIMove(state.board, aiColor, state.aiDifficulty);
-      const aiFlipActionDelayMs = getAiFlipActionDelayMs();
+      const flipCueDurationMs = getDarkAiFlipCueDurationMs();
 
       if (!aiMove) {
         const winner = state.playerColor!;
@@ -393,9 +394,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
           if (flipState.phase !== 'playing') return;
           if (flipState.currentPlayer !== aiColor) return;
 
-          scheduleFlipCue(set, get, aiMove.pos!);
+          scheduleFlipCue(set, get, aiMove.pos!, flipCueDurationMs);
           flipState.executeFlip(aiMove.pos!);
-        }, aiFlipActionDelayMs);
+        }, AI_FLIP_ACTION_DELAY_MS);
       } else if (aiMove.type === 'move' && aiMove.from && aiMove.to) {
         state.selectCell(aiMove.from);
         state.executeMove(aiMove.to);
@@ -406,7 +407,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         if (s.isAiThinking) {
           set({ isAiThinking: false });
         }
-      }, aiMove.type === 'flip' ? aiFlipActionDelayMs + AI_ACTION_SETTLE_DELAY_MS : AI_ACTION_SETTLE_DELAY_MS);
+      }, aiMove.type === 'flip' ? AI_FLIP_ACTION_DELAY_MS + flipCueDurationMs + 100 : AI_ACTION_SETTLE_DELAY_MS);
     }, AI_TURN_THINK_DELAY_MS);
   },
 

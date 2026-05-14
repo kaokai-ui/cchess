@@ -29,6 +29,7 @@ android/      # Capacitor Android project
 - **Target devices**: PC, iPad 10.6", 10" Android Pad, 14" Android Pad, 65" Android TV (4K)
 - **Android TV**: must support D-Pad remote control navigation
 - **Elder-friendly mode**: large fonts (20-28px), large buttons (48-80px), high contrast, slower animations
+- **Dark chess flip cue pacing**: in solo dark chess, the `elder` pace means the flip animation itself plays longer (`2000ms`), not that the AI waits an extra `2000ms` before flipping
 
 ## Game Modes
 
@@ -40,6 +41,7 @@ android/      # Capacitor Android project
 - AI difficulties: `easy` | `normal` | `hard` | `master` (棋聖)
 - Solo AI default difficulty: `hard` for both Bright chess and Dark chess
 - Dark chess solo AI may resign in late endgames when no unrevealed pieces remain and it has no realistic winning line
+- Dark chess solo settings default the AI flip pace to `elder` for clearer accessibility pacing
 - Dark chess has configurable rules (e.g., rook capture range, cannon capture rule)
 
 ## Commands (once initialized)

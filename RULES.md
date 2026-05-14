@@ -81,3 +81,11 @@ AI 只會在下列條件同時成立時主動認輸：
 - AI 只剩少數棋子。
 - AI 目前沒有任何可吃子的步。
 - 依照現存棋型與規則，AI 已無法再吃掉對手剩餘的關鍵棋子。
+
+## 8. Solo Dark Chess Accessibility Timing
+
+- The solo Dark Chess setting `AI 翻牌速度 = 長輩更慢` means the flip animation itself lasts longer.
+- Current pacing:
+  - `標準慢`: flip cue animation plays for about `700ms`
+  - `長輩更慢`: flip cue animation plays for about `2000ms`
+- This setting does not add an extra pre-flip wait of `2000ms`.

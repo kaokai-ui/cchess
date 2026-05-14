@@ -8,6 +8,7 @@ interface DarkPieceProps {
   isValidMove: boolean;
   isLastMove: boolean;
   showFlipCue: boolean;
+  flipCueDurationMs: number;
   onClick: () => void;
 }
 
@@ -17,6 +18,7 @@ const DarkPiece: React.FC<DarkPieceProps> = ({
   isValidMove,
   isLastMove,
   showFlipCue,
+  flipCueDurationMs,
   onClick,
 }) => {
   // Empty cell with valid move indicator
@@ -46,6 +48,9 @@ const DarkPiece: React.FC<DarkPieceProps> = ({
   // Revealed piece
   const textColor = piece.color === 'red' ? '#d32f2f' : '#212121';
   const textShadow = piece.color === 'red' ? '0 1px 2px rgba(211, 47, 47, 0.3)' : '0 1px 2px rgba(0,0,0,0.2)';
+  const flipCueStyle = showFlipCue
+    ? ({ animationDuration: `${flipCueDurationMs}ms` } satisfies React.CSSProperties)
+    : undefined;
 
   return (
     <div
@@ -58,6 +63,7 @@ const DarkPiece: React.FC<DarkPieceProps> = ({
           ? 'ring-2 ring-blue-400 border-[#8d6e63]'
           : 'border-[#8d6e63] hover:shadow-[0_5px_8px_rgba(0,0,0,0.4)] hover:scale-102 active:scale-95'
       } bg-gradient-to-b from-[#fff8e1] to-[#ffe0b2]`}
+      style={flipCueStyle}
       onClick={onClick}
     >
       {/* Inner circle for depth */}
@@ -77,7 +83,7 @@ const DarkPiece: React.FC<DarkPieceProps> = ({
 
       {showFlipCue && (
         <>
-          <div className="dark-flip-cue__hand">
+          <div className="dark-flip-cue__hand" style={flipCueStyle}>
             <svg
               viewBox="0 0 64 64"
               aria-hidden="true"
@@ -109,7 +115,7 @@ const DarkPiece: React.FC<DarkPieceProps> = ({
               />
             </svg>
           </div>
-          <div className="dark-flip-cue__cover" />
+          <div className="dark-flip-cue__cover" style={flipCueStyle} />
         </>
       )}
     </div>

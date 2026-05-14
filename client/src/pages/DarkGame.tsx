@@ -12,6 +12,9 @@ const DarkGame: React.FC = () => {
   const flipRevealCueEnabled = useSettingsStore(
     (state) => state.ui.flipRevealCueEnabled,
   );
+  const darkAiFlipCueDurationMs = useSettingsStore((state) =>
+    state.ui.darkAiFlipPace === 'elder' ? 2000 : 700,
+  );
 
   const {
     board,
@@ -102,6 +105,7 @@ const DarkGame: React.FC = () => {
           validMoves={validMoves}
           lastMove={lastMove}
           flipCue={flipRevealCueEnabled ? flipCue : null}
+          flipCueDurationMs={darkAiFlipCueDurationMs}
           onCellClick={handleCellClick}
         />
       </div>
