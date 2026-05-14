@@ -8,9 +8,11 @@ import {
   isFirebaseConfigured,
 } from '../firebase/app';
 import type { AIDifficulty } from '../stores/darkGameStore';
+import { getDisplayAppVersion } from '../utils/appVersion';
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
+  const appVersion = getDisplayAppVersion();
   const [playMode, setPlayMode] = useState<'solo' | 'online'>('solo');
   const [gameMode, setGameMode] = useState<'bright' | 'dark'>('dark');
   const [difficulty, setDifficulty] = useState<AIDifficulty>('hard');
@@ -185,6 +187,9 @@ const Home: React.FC = () => {
             </p>
             <p className={`font-semibold ${statusClass(isAppCheckEnabled)}`}>
               App Check：{isAppCheckEnabled ? '已啟用' : '未啟用'}
+            </p>
+            <p className="text-sm text-stone-500 leading-6">
+              版本號：{appVersion}
             </p>
           </div>
         </div>

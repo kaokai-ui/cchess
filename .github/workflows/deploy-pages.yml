@@ -63,6 +63,7 @@ jobs:
           VITE_ENABLE_APPCHECK: true
           VITE_FIREBASE_APPCHECK_SITE_KEY: 6Leuz-csAAAAACUjHAYWamojDZutYc1T5JotGokZ
           VITE_BASE_PATH: ${{ steps.base-path.outputs.value }}
+          VITE_APP_VERSION: ${{ github.sha }}
         run: npm run build
 
       - name: Upload GitHub Pages artifact

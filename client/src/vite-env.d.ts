@@ -12,6 +12,7 @@ interface ImportMetaEnv {
   readonly VITE_ENABLE_APPCHECK?: string;
   readonly VITE_FIREBASE_APPCHECK_SITE_KEY?: string;
   readonly VITE_FIREBASE_APPCHECK_DEBUG_TOKEN?: string;
+  readonly VITE_APP_VERSION?: string;
 }
 
 interface ImportMeta {
