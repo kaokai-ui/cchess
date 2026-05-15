@@ -288,6 +288,17 @@ function scoreMoveHeuristics(
   return score;
 }
 
+function evaluateContinuationScore(
+  board: Board,
+  candidate: MoveCandidate,
+  aiColor: PieceColor,
+): number {
+  return (
+    minimax(candidate.newBoard, 1, false, aiColor, -Infinity, Infinity) +
+    scoreMoveHeuristics(board, candidate, aiColor) * 0.5
+  );
+}
+
 function minimax(
   board: Board,
   depth: number,
@@ -360,12 +371,10 @@ export function shouldAISurrender(board: Board, aiColor: PieceColor): boolean {
     return false;
   }
 
-  if (hasAnyCaptureMove(board, aiColor)) {
-    return false;
-  }
-
   const materialGap = getMaterialValue(board, opponentColor) - getMaterialValue(board, aiColor);
   const moveCandidates = getRevealedMoveCandidates(board, aiColor);
+  const captureCandidates = moveCandidates
+    .filter((candidate) => candidate.capturedPiece !== null);
 
   // Absolute dead position: the AI cannot ever capture at least one remaining
   // enemy piece with any of its surviving piece types.
@@ -378,18 +387,39 @@ export function shouldAISurrender(board: Board, aiColor: PieceColor): boolean {
   }
 
   const bestContinuation = Math.max(
-    ...moveCandidates.map((candidate) => (
-      minimax(candidate.newBoard, 1, false, aiColor, -Infinity, Infinity) +
-      scoreMoveHeuristics(board, candidate, aiColor) * 0.5
-    )),
+    ...moveCandidates.map((candidate) => evaluateContinuationScore(board, candidate, aiColor)),
   );
+  const bestCaptureContinuation = captureCandidates.length > 0
+    ? Math.max(
+      ...captureCandidates.map((candidate) => evaluateContinuationScore(board, candidate, aiColor)),
+    )
+    : -Infinity;
+  const bestCaptureValue = captureCandidates.length > 0
+    ? Math.max(
+      ...captureCandidates.map((candidate) => (
+        candidate.capturedPiece ? PIECE_VALUES[candidate.capturedPiece.type] : 0
+      )),
+    )
+    : 0;
 
   const opponentHasCapturePressure = hasAnyCaptureMove(board, opponentColor);
+  const canOnlyNibbleSmallPiece = captureCandidates.length > 0 && bestCaptureValue <= PIECE_VALUES.soldier;
+  const hopelessEvenAfterBestCapture = (
+    captureCandidates.length > 0 &&
+    bestCaptureContinuation <= -55 &&
+    materialGap >= 60 &&
+    (opponentHasCapturePressure || aiPieceCount === 1) &&
+    canOnlyNibbleSmallPiece
+  );
 
   return (
-    materialGap >= 45 &&
-    bestContinuation <= -45 &&
-    (opponentHasCapturePressure || aiPieceCount === 1)
+    hopelessEvenAfterBestCapture ||
+    (
+      captureCandidates.length === 0 &&
+      materialGap >= 45 &&
+      bestContinuation <= -45 &&
+      (opponentHasCapturePressure || aiPieceCount === 1)
+    )
   );
 }
 
