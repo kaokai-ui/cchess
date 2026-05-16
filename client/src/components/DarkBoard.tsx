@@ -49,6 +49,37 @@ const DarkBoard: React.FC<DarkBoardProps> = ({
   flipCueDurationMs,
   onCellClick,
 }) => {
+  const pieceMeasureRef = React.useRef<HTMLDivElement | null>(null);
+  const [capturedPieceSizePx, setCapturedPieceSizePx] = React.useState<number | null>(null);
+
+  React.useEffect(() => {
+    const measureTarget = pieceMeasureRef.current;
+
+    if (!measureTarget) {
+      return undefined;
+    }
+
+    const updateCapturedPieceSize = () => {
+      const style = window.getComputedStyle(measureTarget);
+      const horizontalPadding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+      const boardPieceSize = Math.max(0, measureTarget.getBoundingClientRect().width - horizontalPadding);
+
+      setCapturedPieceSizePx(boardPieceSize * 0.6);
+    };
+
+    updateCapturedPieceSize();
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateCapturedPieceSize();
+    });
+
+    resizeObserver.observe(measureTarget);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
+
   const isSelected = (row: number, col: number) =>
     selectedCell !== null &&
     selectedCell.row === row &&
@@ -74,7 +105,7 @@ const DarkBoard: React.FC<DarkBoardProps> = ({
 
   return (
     <div className="mx-auto flex w-full max-w-6xl items-stretch justify-center gap-2 p-1 sm:gap-3 sm:p-2">
-      <DarkCapturedTray color="black" pieces={capturedBlackPieces} />
+      <DarkCapturedTray color="black" pieces={capturedBlackPieces} pieceSizePx={capturedPieceSizePx} />
 
       <div className="min-w-0 flex-1">
         {/* Board Outer Border */}
@@ -92,7 +123,10 @@ const DarkBoard: React.FC<DarkBoardProps> = ({
                     <div className="absolute inset-0 bg-[#efebe9] rounded-sm border border-[#bcaaa4] opacity-80" />
 
                     {/* Piece Container */}
-                    <div className="relative z-10 p-1 sm:p-1.5 h-full">
+                    <div
+                      ref={rowIdx === 0 && colIdx === 0 ? pieceMeasureRef : null}
+                      className="relative z-10 h-full p-1 sm:p-1.5"
+                    >
                       <DarkPiece
                         piece={cell}
                         isSelected={isSelected(rowIdx, colIdx)}
@@ -111,7 +145,7 @@ const DarkBoard: React.FC<DarkBoardProps> = ({
         </div>
       </div>
 
-      <DarkCapturedTray color="red" pieces={capturedRedPieces} />
+      <DarkCapturedTray color="red" pieces={capturedRedPieces} pieceSizePx={capturedPieceSizePx} />
     </div>
   );
 };
