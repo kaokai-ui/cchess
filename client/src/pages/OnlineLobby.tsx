@@ -1,8 +1,14 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ensureAnonymousAuth, isFirebaseConfigured } from '../firebase/app';
-import { createOnlineRoom, joinOnlineRoom } from '../online/service';
-import type { GameVariant } from '../online/types';
+import {
+  clearRecentOnlineRoomSession,
+  createOnlineRoom,
+  getRecentOnlineRoomSession,
+  joinOnlineRoom,
+  reconnectOnlineRoom,
+} from '../online/service';
+import type { GameVariant, RecentOnlineRoomSession } from '../online/types';
 import { useSettingsStore } from '../stores/settingsStore';
 
 function getVariantLabel(variant: GameVariant) {
@@ -16,6 +22,9 @@ const OnlineLobby: React.FC = () => {
   const [roomCode, setRoomCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [recentSession, setRecentSession] = useState<RecentOnlineRoomSession | null>(
+    () => getRecentOnlineRoomSession(),
+  );
   const { darkChess } = useSettingsStore();
 
   const settingsSummary = useMemo(() => {
@@ -30,8 +39,8 @@ const OnlineLobby: React.FC = () => {
     ];
   }, [darkChess, variant]);
 
-  const gamePath = (roomId: string) =>
-    variant === 'bright'
+  const gamePath = (roomId: string, targetVariant: GameVariant = variant) =>
+    targetVariant === 'bright'
       ? `/online/game/bright/${roomId}`
       : `/online/game/dark/${roomId}`;
 
@@ -64,6 +73,36 @@ const OnlineLobby: React.FC = () => {
     } catch (caughtError) {
       setError(
         caughtError instanceof Error ? caughtError.message : '加入房間失敗，請稍後再試。',
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleResumeRoom = async () => {
+    if (!recentSession) {
+      return;
+    }
+
+    try {
+      setBusy(true);
+      setError('');
+      const reconnectResult = await reconnectOnlineRoom(recentSession.roomId);
+
+      if (!reconnectResult.room) {
+        clearRecentOnlineRoomSession(recentSession.roomId);
+        setRecentSession(null);
+        throw new Error('上次的連線牌局已不存在。');
+      }
+
+      if (!reconnectResult.isMember) {
+        throw new Error('這台裝置目前無法取回這局的玩家身份。');
+      }
+
+      navigate(gamePath(reconnectResult.room.roomId, reconnectResult.room.variant));
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : '回到上次牌局時發生錯誤。',
       );
     } finally {
       setBusy(false);
@@ -119,6 +158,32 @@ const OnlineLobby: React.FC = () => {
         {!isFirebaseConfigured && (
           <div className="rounded-2xl border border-red-300 bg-red-50 p-4 text-red-800 text-sm sm:text-base">
             尚未設定 Firebase 環境變數，請先完成 `client/.env` 設定後再使用連線模式。
+          </div>
+        )}
+
+        {recentSession && (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 space-y-3">
+            <p className="text-base sm:text-lg font-bold text-emerald-900">
+              上次牌局：{getVariantLabel(recentSession.variant)} {recentSession.roomId}
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <button
+                className="py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-lg font-bold rounded-2xl transition-all disabled:opacity-50"
+                onClick={handleResumeRoom}
+                disabled={busy || !isFirebaseConfigured}
+              >
+                回到上次牌局
+              </button>
+              <button
+                className="py-3 px-4 bg-white hover:bg-emerald-100 text-emerald-900 text-lg font-bold rounded-2xl transition-all"
+                onClick={() => {
+                  clearRecentOnlineRoomSession(recentSession.roomId);
+                  setRecentSession(null);
+                }}
+              >
+                清除記錄
+              </button>
+            </div>
           </div>
         )}
 

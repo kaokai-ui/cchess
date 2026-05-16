@@ -1,14 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import DarkBoard from '../components/DarkBoard';
-import { ensureAnonymousAuth } from '../firebase/app';
 import {
-  getCurrentUserId,
   getDarkValidMovesForRoom,
   getPlayerColor,
   getRoomPlayerCount,
   isPlayerTurn,
   leaveOnlineRoom,
+  reconnectOnlineRoom,
   restartOnlineRoom,
   submitDarkFlip,
   submitDarkMove,
@@ -120,13 +119,12 @@ const OnlineDarkGame: React.FC = () => {
 
     const start = async () => {
       try {
-        const user = await ensureAnonymousAuth();
-        const uid = await getCurrentUserId();
+        const reconnectResult = await reconnectOnlineRoom(roomId);
         if (!active) {
           return;
         }
 
-        setMyUid(uid || user.uid);
+        setMyUid(reconnectResult.userId);
         unsubscribe = subscribeToOnlineRoom(roomId, (snapshot) => {
           if (!active) {
             return;

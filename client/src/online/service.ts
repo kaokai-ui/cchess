@@ -1,4 +1,14 @@
-import { get, onDisconnect, onValue, ref, remove, runTransaction, set } from 'firebase/database';
+import {
+  get,
+  onDisconnect,
+  onValue,
+  ref,
+  remove,
+  runTransaction,
+  serverTimestamp,
+  set,
+  update,
+} from 'firebase/database';
 import {
   checkStalemate as checkBrightStalemate,
   checkWinner as checkBrightWinner,
@@ -27,22 +37,135 @@ import {
 import type {
   GameVariant,
   OnlineRoom,
+  OnlineRoomReconnectResult,
   OnlineRoomSnapshot,
   PresenceSnapshot,
+  RecentOnlineRoomSession,
 } from './types';
 
 const ROOM_CODE_ALPHABET = '0123456789';
 const ROOM_CODE_LENGTH = 5;
 const EMPTY_CELL_MARKER = 0;
+const ONLINE_PLAYER_KEY_STORAGE_KEY = 'cchess-online-player-key';
+const RECENT_ONLINE_ROOM_STORAGE_KEY = 'cchess-online-room-session';
 const BOARD_DIMENSIONS = {
   bright: { rows: 10, cols: 9 },
   dark: { rows: 4, cols: 8 },
 } as const;
 
 type SerializedBoardCell = Piece | typeof EMPTY_CELL_MARKER;
+type RoomSeat = 'host' | 'guest';
+
+interface UserSessionPayload {
+  connected: boolean;
+  lastSeen: number | Record<string, string>;
+  playerKey: string;
+  roomId: string | null;
+  variant: GameVariant | null;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function safeReadLocalStorage(key: string) {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeWriteLocalStorage(key: string, value: string) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Ignore storage write failures and keep runtime behavior working.
+  }
+}
+
+function safeRemoveLocalStorage(key: string) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // Ignore storage cleanup failures.
+  }
+}
+
+function createPlayerKey() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  return `player-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+export function getOrCreateOnlinePlayerKey() {
+  const existing = safeReadLocalStorage(ONLINE_PLAYER_KEY_STORAGE_KEY)?.trim();
+  if (existing) {
+    return existing;
+  }
+
+  const next = createPlayerKey();
+  safeWriteLocalStorage(ONLINE_PLAYER_KEY_STORAGE_KEY, next);
+  return next;
+}
+
+function rememberRecentOnlineRoomSession(roomId: string, variant: GameVariant) {
+  const payload: RecentOnlineRoomSession = {
+    roomId,
+    variant,
+    updatedAt: Date.now(),
+  };
+
+  safeWriteLocalStorage(RECENT_ONLINE_ROOM_STORAGE_KEY, JSON.stringify(payload));
+}
+
+export function getRecentOnlineRoomSession(): RecentOnlineRoomSession | null {
+  const raw = safeReadLocalStorage(RECENT_ONLINE_ROOM_STORAGE_KEY);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<RecentOnlineRoomSession>;
+    if (
+      typeof parsed.roomId !== 'string' ||
+      (parsed.variant !== 'bright' && parsed.variant !== 'dark') ||
+      typeof parsed.updatedAt !== 'number'
+    ) {
+      return null;
+    }
+
+    return {
+      roomId: parsed.roomId,
+      variant: parsed.variant,
+      updatedAt: parsed.updatedAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function clearRecentOnlineRoomSession(roomId?: string) {
+  const existing = getRecentOnlineRoomSession();
+  if (roomId && existing?.roomId !== roomId) {
+    return;
+  }
+
+  safeRemoveLocalStorage(RECENT_ONLINE_ROOM_STORAGE_KEY);
 }
 
 function normalizeIndexedCollection(value: unknown): unknown[] {
@@ -247,6 +370,73 @@ function findUidByColor(room: OnlineRoom, color: PieceColor): string | null {
   );
 }
 
+function isPermissionDeniedError(error: unknown) {
+  return (
+    error instanceof Error &&
+    error.message.toLowerCase().includes('permission_denied')
+  );
+}
+
+function movePlayerColorClaim(room: OnlineRoom, fromUid: string, toUid: string) {
+  if (fromUid === toUid) {
+    return;
+  }
+
+  const fromColor = room.playerColors?.[fromUid] ?? null;
+  if (!fromColor) {
+    return;
+  }
+
+  room.playerColors ??= {};
+  room.playerColors[toUid] = fromColor;
+  delete room.playerColors[fromUid];
+}
+
+function getSeatUid(room: OnlineRoom, seat: RoomSeat) {
+  return seat === 'host' ? room.hostUid : room.guestUid;
+}
+
+function setSeatUid(room: OnlineRoom, seat: RoomSeat, uid: string) {
+  if (seat === 'host') {
+    room.hostUid = uid;
+    return;
+  }
+
+  room.guestUid = uid;
+}
+
+function applySeatReclaim(room: OnlineRoom, seat: RoomSeat, uid: string) {
+  const previousUid = getSeatUid(room, seat);
+  if (!previousUid || previousUid === uid) {
+    return false;
+  }
+
+  setSeatUid(room, seat, uid);
+  movePlayerColorClaim(room, previousUid, uid);
+
+  if (room.activePlayerUid === previousUid) {
+    room.activePlayerUid = uid;
+  }
+
+  room.updatedAt = Date.now();
+  return true;
+}
+
+async function upsertUserSession(userId: string, payload: UserSessionPayload) {
+  const db = requireDatabase();
+  await update(ref(db, `userSessions/${userId}`), payload);
+}
+
+async function ensureUserSessionIdentity(userId: string) {
+  await upsertUserSession(userId, {
+    connected: false,
+    lastSeen: Date.now(),
+    playerKey: getOrCreateOnlinePlayerKey(),
+    roomId: null,
+    variant: null,
+  });
+}
+
 function withDarkRuleSet<T>(
   settings: DarkChessSettings | null | undefined,
   callback: () => T,
@@ -367,11 +557,18 @@ async function registerPresence(
 ) {
   const db = requireDatabase();
   const now = Date.now();
+  const playerKey = getOrCreateOnlinePlayerKey();
   const presenceRef = ref(db, `roomPresence/${roomId}/${userId}`);
   const sessionRef = ref(db, `userSessions/${userId}`);
 
   await onDisconnect(presenceRef).remove();
-  await onDisconnect(sessionRef).remove();
+  await onDisconnect(sessionRef).update({
+    connected: false,
+    lastSeen: serverTimestamp(),
+    playerKey,
+    roomId,
+    variant,
+  });
 
   await set(presenceRef, {
     connected: true,
@@ -379,20 +576,111 @@ async function registerPresence(
     lastSeen: now,
   });
 
-  await set(sessionRef, {
+  await update(sessionRef, {
     connected: true,
     lastSeen: now,
+    playerKey,
     roomId,
     variant,
   });
+
+  rememberRecentOnlineRoomSession(roomId, variant);
 }
 
-async function clearPresence(roomId: string, userId: string) {
+async function clearPresence(
+  roomId: string,
+  userId: string,
+  variant: GameVariant | null,
+) {
   const db = requireDatabase();
   await Promise.all([
     remove(ref(db, `roomPresence/${roomId}/${userId}`)),
-    remove(ref(db, `userSessions/${userId}`)),
+    upsertUserSession(userId, {
+      connected: false,
+      lastSeen: Date.now(),
+      playerKey: getOrCreateOnlinePlayerKey(),
+      roomId: null,
+      variant,
+    }),
   ]);
+}
+
+async function attemptSeatReclaim(
+  roomId: string,
+  seat: RoomSeat,
+  userId: string,
+) {
+  const db = requireDatabase();
+  const roomRef = ref(db, `rooms/${roomId}`);
+
+  try {
+    const result = await runTransaction(
+      roomRef,
+      (current) => {
+        const room = normalizeRoom(current);
+        if (!room) {
+          return current;
+        }
+
+        const changed = applySeatReclaim(room, seat, userId);
+        return changed ? serializeRoom(room) : current;
+      },
+      { applyLocally: false },
+    );
+
+    return result.committed;
+  } catch (error) {
+    if (isPermissionDeniedError(error)) {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
+export async function reconnectOnlineRoom(
+  roomId: string,
+): Promise<OnlineRoomReconnectResult> {
+  requireConfiguredFirebase();
+  const normalizedRoomId = roomId.trim().toUpperCase();
+  const user = await ensureAnonymousAuth();
+  await ensureUserSessionIdentity(user.uid);
+
+  let room = await readRoom(normalizedRoomId);
+  if (!room) {
+    clearRecentOnlineRoomSession(normalizedRoomId);
+    return {
+      room: null,
+      userId: user.uid,
+      isMember: false,
+      reclaimed: false,
+    };
+  }
+
+  let reclaimed = false;
+
+  if (room.hostUid !== user.uid && room.guestUid !== user.uid) {
+    const hostReclaimed = await attemptSeatReclaim(normalizedRoomId, 'host', user.uid);
+    const guestReclaimed = hostReclaimed
+      ? false
+      : await attemptSeatReclaim(normalizedRoomId, 'guest', user.uid);
+
+    reclaimed = hostReclaimed || guestReclaimed;
+    room = await readRoom(normalizedRoomId);
+  }
+
+  const isMember = Boolean(room && (room.hostUid === user.uid || room.guestUid === user.uid));
+
+  if (room && isMember) {
+    await registerPresence(normalizedRoomId, user.uid, room.variant);
+  }
+
+  return {
+    room,
+    userId: user.uid,
+    isMember,
+    reclaimed,
+  };
 }
 
 export async function createOnlineRoom(
@@ -402,6 +690,7 @@ export async function createOnlineRoom(
   requireConfiguredFirebase();
   const db = requireDatabase();
   const user = await ensureAnonymousAuth();
+  await ensureUserSessionIdentity(user.uid);
 
   for (let attempt = 0; attempt < 12; attempt += 1) {
     const roomId = createRoomCode();
@@ -433,6 +722,7 @@ export async function joinOnlineRoom(roomId: string) {
   const db = requireDatabase();
   const normalizedRoomId = roomId.trim().toUpperCase();
   const user = await ensureAnonymousAuth();
+  await ensureUserSessionIdentity(user.uid);
   const roomRef = ref(db, `rooms/${normalizedRoomId}`);
 
   const existingRoomSnapshot = await get(roomRef);
@@ -445,7 +735,12 @@ export async function joinOnlineRoom(roomId: string) {
     throw new Error('房間資料格式異常。');
   }
 
-  if (existingRoom.hostUid === user.uid) {
+  const reconnectResult = await reconnectOnlineRoom(normalizedRoomId);
+  if (reconnectResult.isMember) {
+    return normalizedRoomId;
+  }
+
+  if (existingRoom.hostUid === user.uid && !reconnectResult.isMember) {
     throw new Error('目前這個瀏覽器就是房主，請用無痕視窗或另一個瀏覽器模擬第二位玩家。');
   }
 
@@ -511,7 +806,8 @@ export async function leaveOnlineRoom(roomId: string) {
   const db = requireDatabase();
   const user = await ensureAnonymousAuth();
   const roomRef = ref(db, `rooms/${roomId}`);
-  await get(roomRef);
+  const roomSnapshot = await get(roomRef);
+  const room = roomSnapshot.exists() ? normalizeRoom(roomSnapshot.val()) : null;
 
   await runTransaction(
     roomRef,
@@ -544,7 +840,8 @@ export async function leaveOnlineRoom(roomId: string) {
     { applyLocally: false },
   );
 
-  await clearPresence(roomId, user.uid);
+  await clearPresence(roomId, user.uid, room?.variant ?? null);
+  clearRecentOnlineRoomSession(roomId);
 }
 
 export async function restartOnlineRoom(roomId: string) {

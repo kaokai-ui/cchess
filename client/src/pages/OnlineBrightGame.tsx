@@ -1,14 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import BrightBoard from '../components/BrightBoard';
-import { ensureAnonymousAuth } from '../firebase/app';
 import {
   getBrightValidMovesForRoom,
   getPlayerColor,
   getRoomPlayerCount,
-  getCurrentUserId,
   isPlayerTurn,
   leaveOnlineRoom,
+  reconnectOnlineRoom,
   restartOnlineRoom,
   submitBrightMove,
   subscribeToOnlineRoom,
@@ -56,13 +55,12 @@ const OnlineBrightGame: React.FC = () => {
 
     const start = async () => {
       try {
-        const user = await ensureAnonymousAuth();
-        const uid = await getCurrentUserId();
+        const reconnectResult = await reconnectOnlineRoom(roomId);
         if (!active) {
           return;
         }
 
-        setMyUid(uid || user.uid);
+        setMyUid(reconnectResult.userId);
         unsubscribe = subscribeToOnlineRoom(roomId, (snapshot) => {
           if (!active) {
             return;

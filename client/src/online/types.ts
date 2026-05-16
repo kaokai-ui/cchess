@@ -34,3 +34,16 @@ export interface OnlineRoomSnapshot {
   room: OnlineRoom | null;
   presence: Record<string, PresenceSnapshot>;
 }
+
+export interface RecentOnlineRoomSession {
+  roomId: string;
+  variant: GameVariant;
+  updatedAt: number;
+}
+
+export interface OnlineRoomReconnectResult {
+  room: OnlineRoom | null;
+  userId: string;
+  isMember: boolean;
+  reclaimed: boolean;
+}
