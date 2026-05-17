@@ -14,7 +14,8 @@ import {
   subscribeToOnlineRoom,
 } from '../online/service';
 import { useSettingsStore } from '../stores/settingsStore';
-import type { OnlineRoom, PresenceSnapshot } from '../online/types';
+import type { DarkOnlineRoom, PresenceSnapshot } from '../online/types';
+import { isDarkOnlineRoom } from '../online/types';
 import type { Position } from '../shared/types';
 
 const FLIP_CUE_DURATION_MS = 700;
@@ -29,8 +30,8 @@ function isSamePosition(left: Position | null, right: Position | null) {
 }
 
 function findRemoteFlipPosition(
-  previousRoom: OnlineRoom | null,
-  nextRoom: OnlineRoom | null,
+  previousRoom: DarkOnlineRoom | null,
+  nextRoom: DarkOnlineRoom | null,
   myUid: string,
 ): Position | null {
   if (!previousRoom || !nextRoom || !myUid) {
@@ -102,7 +103,7 @@ const OnlineDarkGame: React.FC = () => {
   const flipRevealCueEnabled = useSettingsStore(
     (state) => state.ui.flipRevealCueEnabled,
   );
-  const [room, setRoom] = useState<OnlineRoom | null>(null);
+  const [room, setRoom] = useState<DarkOnlineRoom | null>(null);
   const [presence, setPresence] = useState<Record<string, PresenceSnapshot>>({});
   const [myUid, setMyUid] = useState('');
   const [selectedCell, setSelectedCell] = useState<Position | null>(null);
@@ -110,7 +111,7 @@ const OnlineDarkGame: React.FC = () => {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(true);
   const [restarting, setRestarting] = useState(false);
-  const previousRoomRef = useRef<OnlineRoom | null>(null);
+  const previousRoomRef = useRef<DarkOnlineRoom | null>(null);
   const flipCueTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -130,7 +131,7 @@ const OnlineDarkGame: React.FC = () => {
             return;
           }
 
-          setRoom(snapshot.room);
+          setRoom(isDarkOnlineRoom(snapshot.room) ? snapshot.room : null);
           setPresence(snapshot.presence);
           setBusy(false);
         });
@@ -213,7 +214,7 @@ const OnlineDarkGame: React.FC = () => {
     );
   }, [activeSelection, myUid, room]);
 
-  const myColor = room ? getPlayerColor(room, myUid) : null;
+  const myColor = room ? (getPlayerColor(room, myUid) as 'red' | 'black' | null) : null;
   const waitingForGuest = room?.status === 'waiting';
 
   const handleLeave = async () => {
@@ -359,13 +360,13 @@ const OnlineDarkGame: React.FC = () => {
             <div className="bg-white rounded-xl px-3 py-2.5 shadow-sm">
               <p className="text-xs text-gray-500">房主</p>
               <p className="text-sm font-bold text-amber-900">
-                {getColorLabel(getPlayerColor(room, room.hostUid))} · {getConnectionLabel(room.hostUid, presence)}
+                {getColorLabel(getPlayerColor(room, room.hostUid) as 'red' | 'black' | null)} · {getConnectionLabel(room.hostUid, presence)}
               </p>
             </div>
             <div className="bg-white rounded-xl px-3 py-2.5 shadow-sm">
               <p className="text-xs text-gray-500">對手</p>
               <p className="text-sm font-bold text-amber-900">
-                {getColorLabel(room.guestUid ? getPlayerColor(room, room.guestUid) : null)} · {getConnectionLabel(room.guestUid, presence)}
+                {getColorLabel(room.guestUid ? (getPlayerColor(room, room.guestUid) as 'red' | 'black' | null) : null)} · {getConnectionLabel(room.guestUid, presence)}
               </p>
             </div>
           </div>

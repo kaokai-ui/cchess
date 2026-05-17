@@ -3,10 +3,12 @@ import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import Home from './pages/Home';
 import DarkGame from './pages/DarkGame';
 import BrightGame from './pages/BrightGame';
+import GomokuGame from './pages/GomokuGame';
 import Settings from './pages/Settings';
 import OnlineLobby from './pages/OnlineLobby';
 import OnlineBrightGame from './pages/OnlineBrightGame';
 import OnlineDarkGame from './pages/OnlineDarkGame';
+import OnlineGomokuGame from './pages/OnlineGomokuGame';
 
 const routerBasename = import.meta.env.VITE_BASE_PATH?.replace(/\/$/, '') || '/';
 
@@ -43,9 +45,11 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/game/dark" element={<DarkGame />} />
         <Route path="/game/bright" element={<BrightGame />} />
+        <Route path="/game/gomoku" element={<GomokuGame />} />
         <Route path="/online/lobby" element={<OnlineLobby />} />
         <Route path="/online/game/bright/:roomId" element={<OnlineBrightGame />} />
         <Route path="/online/game/dark/:roomId" element={<OnlineDarkGame />} />
+        <Route path="/online/game/gomoku/:roomId" element={<OnlineGomokuGame />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Home />} />
       </Routes>

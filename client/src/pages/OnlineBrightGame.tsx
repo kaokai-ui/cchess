@@ -12,7 +12,8 @@ import {
   submitBrightMove,
   subscribeToOnlineRoom,
 } from '../online/service';
-import type { OnlineRoom, PresenceSnapshot } from '../online/types';
+import type { BrightOnlineRoom, PresenceSnapshot } from '../online/types';
+import { isBrightOnlineRoom } from '../online/types';
 import type { Position } from '../shared/types';
 
 function getColorLabel(color: 'red' | 'black' | null) {
@@ -41,7 +42,7 @@ function getConnectionLabel(
 const OnlineBrightGame: React.FC = () => {
   const navigate = useNavigate();
   const { roomId = '' } = useParams();
-  const [room, setRoom] = useState<OnlineRoom | null>(null);
+  const [room, setRoom] = useState<BrightOnlineRoom | null>(null);
   const [presence, setPresence] = useState<Record<string, PresenceSnapshot>>({});
   const [myUid, setMyUid] = useState('');
   const [selectedCell, setSelectedCell] = useState<Position | null>(null);
@@ -66,7 +67,7 @@ const OnlineBrightGame: React.FC = () => {
             return;
           }
 
-          setRoom(snapshot.room);
+          setRoom(isBrightOnlineRoom(snapshot.room) ? snapshot.room : null);
           setPresence(snapshot.presence);
           setBusy(false);
         });
@@ -111,7 +112,7 @@ const OnlineBrightGame: React.FC = () => {
     return getBrightValidMovesForRoom(room.board, activeSelection);
   }, [activeSelection, myUid, room]);
 
-  const myColor = room ? getPlayerColor(room, myUid) : null;
+  const myColor = room ? (getPlayerColor(room, myUid) as 'red' | 'black' | null) : null;
   const waitingForGuest = room?.status === 'waiting';
   const turnLabel = room ? `${room.currentPlayer === 'red' ? '紅方' : '黑方'}的回合` : '';
 

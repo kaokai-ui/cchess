@@ -11,14 +11,30 @@ import {
 import type { GameVariant, RecentOnlineRoomSession } from '../online/types';
 import { useSettingsStore } from '../stores/settingsStore';
 
+function normalizeVariant(value: string | null): GameVariant {
+  if (value === 'bright' || value === 'dark' || value === 'gomoku') {
+    return value;
+  }
+
+  return 'dark';
+}
+
 function getVariantLabel(variant: GameVariant) {
-  return variant === 'bright' ? '明棋' : '暗棋';
+  if (variant === 'bright') {
+    return '明棋';
+  }
+
+  if (variant === 'gomoku') {
+    return '五子棋';
+  }
+
+  return '暗棋';
 }
 
 const OnlineLobby: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const variant = (searchParams.get('variant') === 'bright' ? 'bright' : 'dark') as GameVariant;
+  const variant = normalizeVariant(searchParams.get('variant'));
   const [roomCode, setRoomCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -33,16 +49,23 @@ const OnlineLobby: React.FC = () => {
     }
 
     return [
-      `車吃子: ${darkChess.rookCaptureRange === 'adjacent' ? '僅相鄰' : '直線全範圍'}`,
-      `砲吃子: ${darkChess.cannonCaptureRule === 'needJump' ? '需翻山' : '可直接吃'}`,
-      `兵吃將: ${darkChess.soldierKillGeneral ? '允許' : '不允許'}`,
+      `車吃子：${darkChess.rookCaptureRange === 'adjacent' ? '僅相鄰' : '直線全範圍'}`,
+      `砲吃子：${darkChess.cannonCaptureRule === 'needJump' ? '需翻山' : '可直接吃'}`,
+      `兵吃帥：${darkChess.soldierKillGeneral ? '允許' : '不允許'}`,
     ];
   }, [darkChess, variant]);
 
-  const gamePath = (roomId: string, targetVariant: GameVariant = variant) =>
-    targetVariant === 'bright'
-      ? `/online/game/bright/${roomId}`
-      : `/online/game/dark/${roomId}`;
+  const gamePath = (roomId: string, targetVariant: GameVariant = variant) => {
+    if (targetVariant === 'bright') {
+      return `/online/game/bright/${roomId}`;
+    }
+
+    if (targetVariant === 'gomoku') {
+      return `/online/game/gomoku/${roomId}`;
+    }
+
+    return `/online/game/dark/${roomId}`;
+  };
 
   const handleCreateRoom = async () => {
     try {
@@ -92,17 +115,17 @@ const OnlineLobby: React.FC = () => {
       if (!reconnectResult.room) {
         clearRecentOnlineRoomSession(recentSession.roomId);
         setRecentSession(null);
-        throw new Error('上次的連線牌局已不存在。');
+        throw new Error('找不到先前房間，可能已被刪除。');
       }
 
       if (!reconnectResult.isMember) {
-        throw new Error('這台裝置目前無法取回這局的玩家身份。');
+        throw new Error('你不是這個房間的玩家，無法直接返回。');
       }
 
       navigate(gamePath(reconnectResult.room.roomId, reconnectResult.room.variant));
     } catch (caughtError) {
       setError(
-        caughtError instanceof Error ? caughtError.message : '回到上次牌局時發生錯誤。',
+        caughtError instanceof Error ? caughtError.message : '無法回到先前房間。',
       );
     } finally {
       setBusy(false);
@@ -110,44 +133,37 @@ const OnlineLobby: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-amber-50 to-amber-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-2xl p-6 sm:p-8 md:p-10 max-w-xl w-full space-y-6">
+    <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,#fff3d4_0%,#f6deab_40%,#e9c688_100%)] p-4">
+      <div className="w-full max-w-xl space-y-6 rounded-[2rem] border border-amber-200/60 bg-white/92 p-6 shadow-2xl sm:p-8 md:p-10">
         <div className="text-center">
-          <h1 className="text-3xl sm:text-4xl font-bold text-amber-900">
-            雙人連線大廳
+          <h1 className="text-3xl font-black text-amber-950 sm:text-4xl">
+            連線對戰大廳
           </h1>
-          <p className="mt-2 text-lg sm:text-xl text-amber-700">
-            {getVariantLabel(variant)}模式
+          <p className="mt-2 text-lg font-semibold text-amber-700 sm:text-xl">
+            {getVariantLabel(variant)}
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            className={`py-3 px-4 rounded-xl text-lg font-bold transition-all ${
-              variant === 'bright'
-                ? 'bg-amber-600 text-white shadow-lg'
-                : 'bg-amber-100 text-amber-900 hover:bg-amber-200'
-            }`}
-            onClick={() => setSearchParams({ variant: 'bright' })}
-          >
-            明棋
-          </button>
-          <button
-            className={`py-3 px-4 rounded-xl text-lg font-bold transition-all ${
-              variant === 'dark'
-                ? 'bg-amber-600 text-white shadow-lg'
-                : 'bg-amber-100 text-amber-900 hover:bg-amber-200'
-            }`}
-            onClick={() => setSearchParams({ variant: 'dark' })}
-          >
-            暗棋
-          </button>
+        <div className="grid grid-cols-3 gap-3">
+          {(['bright', 'dark', 'gomoku'] as GameVariant[]).map((candidate) => (
+            <button
+              key={candidate}
+              className={`rounded-2xl px-4 py-3 text-lg font-black transition-all ${
+                variant === candidate
+                  ? 'bg-amber-700 text-white shadow-lg'
+                  : 'bg-amber-100 text-amber-900 hover:bg-amber-200'
+              }`}
+              onClick={() => setSearchParams({ variant: candidate })}
+            >
+              {getVariantLabel(candidate)}
+            </button>
+          ))}
         </div>
 
         {variant === 'dark' && settingsSummary && (
-          <div className="rounded-2xl bg-amber-50 border border-amber-200 p-4">
-            <h2 className="text-lg font-bold text-amber-900 mb-2">本局暗棋設定</h2>
-            <div className="space-y-1 text-sm sm:text-base text-amber-800">
+          <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4">
+            <h2 className="mb-2 text-lg font-black text-amber-900">本局暗棋規則</h2>
+            <div className="space-y-1 text-sm text-amber-800 sm:text-base">
               {settingsSummary.map((line) => (
                 <p key={line}>{line}</p>
               ))}
@@ -155,33 +171,41 @@ const OnlineLobby: React.FC = () => {
           </div>
         )}
 
+        {variant === 'gomoku' && (
+          <div className="rounded-3xl border border-sky-200 bg-sky-50 p-4 text-sm leading-7 text-sky-900 sm:text-base">
+            五子棋連線採用獨立房間與落子同步流程。
+            <br />
+            黑子先手，兩位玩家會分別固定為黑子與白子。
+          </div>
+        )}
+
         {!isFirebaseConfigured && (
-          <div className="rounded-2xl border border-red-300 bg-red-50 p-4 text-red-800 text-sm sm:text-base">
-            尚未設定 Firebase 環境變數，請先完成 `client/.env` 設定後再使用連線模式。
+          <div className="rounded-3xl border border-red-300 bg-red-50 p-4 text-sm text-red-800 sm:text-base">
+            Firebase 尚未設定完成，請先補齊 `client/.env` 後再使用連線模式。
           </div>
         )}
 
         {recentSession && (
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 space-y-3">
-            <p className="text-base sm:text-lg font-bold text-emerald-900">
-              上次牌局：{getVariantLabel(recentSession.variant)} {recentSession.roomId}
+          <div className="space-y-3 rounded-3xl border border-emerald-200 bg-emerald-50 p-4">
+            <p className="text-base font-black text-emerald-900 sm:text-lg">
+              最近房間：{getVariantLabel(recentSession.variant)} / {recentSession.roomId}
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
               <button
-                className="py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-lg font-bold rounded-2xl transition-all disabled:opacity-50"
+                className="rounded-2xl bg-emerald-600 px-4 py-3 text-lg font-black text-white transition-all hover:bg-emerald-700 disabled:opacity-50"
                 onClick={handleResumeRoom}
                 disabled={busy || !isFirebaseConfigured}
               >
-                回到上次牌局
+                回到房間
               </button>
               <button
-                className="py-3 px-4 bg-white hover:bg-emerald-100 text-emerald-900 text-lg font-bold rounded-2xl transition-all"
+                className="rounded-2xl bg-white px-4 py-3 text-lg font-black text-emerald-900 transition-all hover:bg-emerald-100"
                 onClick={() => {
                   clearRecentOnlineRoomSession(recentSession.roomId);
                   setRecentSession(null);
                 }}
               >
-                清除記錄
+                清除紀錄
               </button>
             </div>
           </div>
@@ -189,7 +213,7 @@ const OnlineLobby: React.FC = () => {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <button
-            className="py-4 px-5 bg-green-600 hover:bg-green-700 text-white text-xl font-bold rounded-2xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="rounded-2xl bg-green-600 px-5 py-4 text-xl font-black text-white shadow-lg transition-all hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
             onClick={handleCreateRoom}
             disabled={busy || !isFirebaseConfigured}
           >
@@ -198,14 +222,14 @@ const OnlineLobby: React.FC = () => {
 
           <div className="space-y-3">
             <input
-              className="w-full rounded-2xl border border-amber-200 px-4 py-3 text-lg uppercase tracking-[0.3em] text-center focus:outline-none focus:ring-2 focus:ring-amber-500"
+              className="w-full rounded-2xl border border-amber-200 px-4 py-3 text-center text-lg uppercase tracking-[0.3em] text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
               placeholder="輸入房號"
               value={roomCode}
               maxLength={6}
               onChange={(event) => setRoomCode(event.target.value.toUpperCase())}
             />
             <button
-              className="w-full py-4 px-5 bg-blue-600 hover:bg-blue-700 text-white text-xl font-bold rounded-2xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full rounded-2xl bg-blue-600 px-5 py-4 text-xl font-black text-white shadow-lg transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               onClick={handleJoinRoom}
               disabled={busy || !roomCode.trim() || !isFirebaseConfigured}
             >
@@ -215,23 +239,23 @@ const OnlineLobby: React.FC = () => {
         </div>
 
         {error && (
-          <div className="rounded-2xl border border-red-300 bg-red-50 p-4 text-red-800 text-sm sm:text-base">
+          <div className="rounded-3xl border border-red-300 bg-red-50 p-4 text-sm text-red-800 sm:text-base">
             {error}
           </div>
         )}
 
         <div className="flex flex-col gap-3 sm:flex-row">
           <button
-            className="flex-1 py-3 bg-amber-100 hover:bg-amber-200 text-amber-900 text-lg font-bold rounded-2xl transition-all"
+            className="flex-1 rounded-2xl bg-amber-100 py-3 text-lg font-black text-amber-900 transition-all hover:bg-amber-200"
             onClick={() => navigate('/settings')}
           >
-            遊戲設定
+            設定
           </button>
           <button
-            className="flex-1 py-3 bg-gray-600 hover:bg-gray-700 text-white text-lg font-bold rounded-2xl transition-all"
+            className="flex-1 rounded-2xl bg-stone-700 py-3 text-lg font-black text-white transition-all hover:bg-stone-800"
             onClick={() => navigate('/')}
           >
-            返回主選單
+            返回選單
           </button>
         </div>
       </div>

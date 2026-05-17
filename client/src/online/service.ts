@@ -26,7 +26,15 @@ import {
   movePiece as moveDarkPiece,
   setSettings as setDarkSettings,
 } from '../shared/dark-chess/engine';
+import {
+  checkWinner as checkGomokuWinner,
+  createInitialBoard as createGomokuBoard,
+  isBoardFull as isGomokuBoardFull,
+  isValidMove as isValidGomokuMove,
+  placeStone as placeGomokuStone,
+} from '../shared/gomoku/engine';
 import type { Position, PieceColor, Board, Cell, Piece } from '../shared/types';
+import type { GomokuBoard, GomokuCell, GomokuStone } from '../shared/gomoku/types';
 import type { DarkChessSettings } from '../stores/settingsStore';
 import {
   ensureAnonymousAuth,
@@ -37,6 +45,7 @@ import {
 import type {
   GameVariant,
   OnlineRoom,
+  OnlinePlayerColor,
   OnlineRoomReconnectResult,
   OnlineRoomSnapshot,
   PresenceSnapshot,
@@ -51,9 +60,10 @@ const RECENT_ONLINE_ROOM_STORAGE_KEY = 'cchess-online-room-session';
 const BOARD_DIMENSIONS = {
   bright: { rows: 10, cols: 9 },
   dark: { rows: 4, cols: 8 },
+  gomoku: { rows: 15, cols: 15 },
 } as const;
 
-type SerializedBoardCell = Piece | typeof EMPTY_CELL_MARKER;
+type SerializedBoardCell = Piece | GomokuStone | typeof EMPTY_CELL_MARKER;
 type RoomSeat = 'host' | 'guest';
 
 interface UserSessionPayload {
@@ -143,7 +153,9 @@ export function getRecentOnlineRoomSession(): RecentOnlineRoomSession | null {
     const parsed = JSON.parse(raw) as Partial<RecentOnlineRoomSession>;
     if (
       typeof parsed.roomId !== 'string' ||
-      (parsed.variant !== 'bright' && parsed.variant !== 'dark') ||
+      (parsed.variant !== 'bright' &&
+        parsed.variant !== 'dark' &&
+        parsed.variant !== 'gomoku') ||
       typeof parsed.updatedAt !== 'number'
     ) {
       return null;
@@ -222,25 +234,49 @@ function deserializeCell(value: unknown): Cell {
   };
 }
 
-function serializeBoard(board: Board): SerializedBoardCell[][] {
-  return board.map((row) =>
+function deserializeGomokuCell(value: unknown): GomokuCell {
+  if (value === 'black' || value === 'white') {
+    return value;
+  }
+
+  return null;
+}
+
+function serializeBoard(board: Board | GomokuBoard, variant: GameVariant): SerializedBoardCell[][] {
+  if (variant === 'gomoku') {
+    return (board as GomokuBoard).map((row) =>
+      row.map((cell) => (cell === 'black' || cell === 'white' ? cell : EMPTY_CELL_MARKER)),
+    );
+  }
+
+  return (board as Board).map((row) =>
     row.map((cell) => (cell ? { ...cell } : EMPTY_CELL_MARKER)),
   );
 }
 
 function deserializeBoard(
   value: unknown,
+  variant: GameVariant,
   expectedRows: number,
   expectedCols: number,
-): Board {
+): Board | GomokuBoard {
   const sourceRows = normalizeIndexedCollection(value);
+
+  if (variant === 'gomoku') {
+    return Array.from({ length: expectedRows }, (_, rowIndex) => {
+      const sourceCols = normalizeIndexedCollection(sourceRows[rowIndex]);
+      return Array.from({ length: expectedCols }, (_, colIndex) =>
+        deserializeGomokuCell(sourceCols[colIndex]),
+      );
+    }) as GomokuBoard;
+  }
 
   return Array.from({ length: expectedRows }, (_, rowIndex) => {
     const sourceCols = normalizeIndexedCollection(sourceRows[rowIndex]);
     return Array.from({ length: expectedCols }, (_, colIndex) =>
       deserializeCell(sourceCols[colIndex]),
     );
-  });
+  }) as Board;
 }
 
 function normalizeLastMove(value: unknown): { from: Position; to: Position } | null {
@@ -268,10 +304,15 @@ function normalizeRoom(value: unknown): OnlineRoom | null {
     return null;
   }
 
-  const variant = value.variant === 'bright' ? 'bright' : 'dark';
+  const variant =
+    value.variant === 'bright'
+      ? 'bright'
+      : value.variant === 'gomoku'
+      ? 'gomoku'
+      : 'dark';
   const dimensions = BOARD_DIMENSIONS[variant];
 
-  return {
+  const baseRoom = {
     roomId: typeof value.roomId === 'string' ? value.roomId : '',
     variant,
     status:
@@ -280,11 +321,61 @@ function normalizeRoom(value: unknown): OnlineRoom | null {
       value.status === 'abandoned'
         ? value.status
         : 'waiting',
-    board: deserializeBoard(value.board, dimensions.rows, dimensions.cols),
-    currentPlayer: value.currentPlayer === 'black' ? 'black' : 'red',
     activePlayerUid: typeof value.activePlayerUid === 'string' ? value.activePlayerUid : null,
     hostUid: typeof value.hostUid === 'string' ? value.hostUid : '',
     guestUid: typeof value.guestUid === 'string' ? value.guestUid : null,
+    phase: value.phase === 'gameOver' ? 'gameOver' : 'playing',
+    lastMove: normalizeLastMove(value.lastMove),
+    message: typeof value.message === 'string' ? value.message : '',
+    createdAt: typeof value.createdAt === 'number' ? value.createdAt : Date.now(),
+    updatedAt: typeof value.updatedAt === 'number' ? value.updatedAt : Date.now(),
+  } as const;
+
+  if (variant === 'gomoku') {
+    return {
+      ...baseRoom,
+      variant: 'gomoku',
+      board: deserializeBoard(value.board, variant, dimensions.rows, dimensions.cols) as GomokuBoard,
+      currentPlayer: value.currentPlayer === 'white' ? 'white' : 'black',
+      playerColors: isRecord(value.playerColors)
+        ? Object.fromEntries(
+            Object.entries(value.playerColors).map(([uid, color]) => [
+              uid,
+              color === 'black' || color === 'white' ? color : null,
+            ]),
+          )
+        : {},
+      winner: value.winner === 'black' || value.winner === 'white' ? value.winner : null,
+      isFlippingFirst: false,
+      darkChessSettings: null,
+    };
+  }
+
+  if (variant === 'bright') {
+    return {
+      ...baseRoom,
+      variant: 'bright',
+      board: deserializeBoard(value.board, variant, dimensions.rows, dimensions.cols) as Board,
+      currentPlayer: value.currentPlayer === 'black' ? 'black' : 'red',
+      playerColors: isRecord(value.playerColors)
+        ? Object.fromEntries(
+            Object.entries(value.playerColors).map(([uid, color]) => [
+              uid,
+              color === 'red' || color === 'black' ? color : null,
+            ]),
+          )
+        : {},
+      winner: value.winner === 'red' || value.winner === 'black' ? value.winner : null,
+      isFlippingFirst: false,
+      darkChessSettings: null,
+    };
+  }
+
+  return {
+    ...baseRoom,
+    variant: 'dark',
+    board: deserializeBoard(value.board, variant, dimensions.rows, dimensions.cols) as Board,
+    currentPlayer: value.currentPlayer === 'black' ? 'black' : 'red',
     playerColors: isRecord(value.playerColors)
       ? Object.fromEntries(
           Object.entries(value.playerColors).map(([uid, color]) => [
@@ -293,13 +384,8 @@ function normalizeRoom(value: unknown): OnlineRoom | null {
           ]),
         )
       : {},
-    phase: value.phase === 'gameOver' ? 'gameOver' : 'playing',
     winner: value.winner === 'red' || value.winner === 'black' ? value.winner : null,
     isFlippingFirst: Boolean(value.isFlippingFirst),
-    lastMove: normalizeLastMove(value.lastMove),
-    message: typeof value.message === 'string' ? value.message : '',
-    createdAt: typeof value.createdAt === 'number' ? value.createdAt : Date.now(),
-    updatedAt: typeof value.updatedAt === 'number' ? value.updatedAt : Date.now(),
     darkChessSettings: isRecord(value.darkChessSettings)
       ? {
           rookCaptureRange:
@@ -319,7 +405,7 @@ function normalizeRoom(value: unknown): OnlineRoom | null {
 function serializeRoom(room: OnlineRoom) {
   return {
     ...room,
-    board: serializeBoard(room.board),
+    board: serializeBoard(room.board, room.variant),
     playerColors: room.playerColors ?? {},
     lastMove: room.lastMove ?? null,
   };
@@ -347,8 +433,12 @@ function createRoomCode() {
   }).join('');
 }
 
-function otherColor(color: PieceColor): PieceColor {
+function otherChessColor(color: PieceColor): PieceColor {
   return color === 'red' ? 'black' : 'red';
+}
+
+function otherGomokuStone(stone: GomokuStone): GomokuStone {
+  return stone === 'black' ? 'white' : 'black';
 }
 
 function findOpponentUid(room: OnlineRoom, playerUid: string): string | null {
@@ -363,7 +453,7 @@ function findOpponentUid(room: OnlineRoom, playerUid: string): string | null {
   return null;
 }
 
-function findUidByColor(room: OnlineRoom, color: PieceColor): string | null {
+function findUidByColor(room: OnlineRoom, color: OnlinePlayerColor): string | null {
   return (
     Object.entries(room.playerColors ?? {}).find(([, playerColor]) => playerColor === color)?.[0] ||
     null
@@ -484,6 +574,30 @@ function createInitialRoom(
     };
   }
 
+  if (variant === 'gomoku') {
+    return {
+      roomId,
+      variant,
+      status: 'waiting',
+      board: createGomokuBoard(),
+      currentPlayer: 'black',
+      activePlayerUid: hostUid,
+      hostUid,
+      guestUid: null,
+      playerColors: {
+        [hostUid]: 'black',
+      },
+      phase: 'playing',
+      winner: null,
+      isFlippingFirst: false,
+      lastMove: null,
+      message: '等待玩家加入房間',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      darkChessSettings: null,
+    };
+  }
+
   return {
     roomId,
     variant,
@@ -531,6 +645,32 @@ function createRematchRoom(room: OnlineRoom): OnlineRoom {
       lastMove: null,
       message: hasGuest ? '紅方先行' : '等待對手加入房間',
       updatedAt,
+    };
+  }
+
+  if (room.variant === 'gomoku') {
+    const playerColors: Record<string, GomokuStone | null> = {
+      [room.hostUid]: 'black',
+    };
+
+    if (room.guestUid) {
+      playerColors[room.guestUid] = 'white';
+    }
+
+    return {
+      ...room,
+      status: hasGuest ? 'playing' : 'waiting',
+      board: createGomokuBoard(),
+      currentPlayer: 'black',
+      activePlayerUid: room.hostUid,
+      playerColors,
+      phase: 'playing',
+      winner: null,
+      isFlippingFirst: false,
+      lastMove: null,
+      message: hasGuest ? '黑子先手' : '等待玩家加入房間',
+      updatedAt,
+      darkChessSettings: null,
     };
   }
 
@@ -753,20 +893,41 @@ export async function joinOnlineRoom(roomId: string) {
   }
 
   try {
-    const updatedRoom: OnlineRoom = {
-      ...existingRoom,
-      guestUid: user.uid,
-      status: 'playing',
-      updatedAt: Date.now(),
-      playerColors: { ...(existingRoom.playerColors ?? {}) },
-      message:
-        existingRoom.variant === 'bright'
-          ? '紅方先行'
-          : '房主先翻第一顆棋子決定顏色',
-    };
+    let updatedRoom: OnlineRoom;
 
     if (existingRoom.variant === 'bright') {
-      updatedRoom.playerColors[user.uid] = 'black';
+      updatedRoom = {
+        ...existingRoom,
+        guestUid: user.uid,
+        status: 'playing',
+        updatedAt: Date.now(),
+        playerColors: {
+          ...(existingRoom.playerColors ?? {}),
+          [user.uid]: 'black',
+        },
+        message: '紅方先行',
+      };
+    } else if (existingRoom.variant === 'gomoku') {
+      updatedRoom = {
+        ...existingRoom,
+        guestUid: user.uid,
+        status: 'playing',
+        updatedAt: Date.now(),
+        playerColors: {
+          ...(existingRoom.playerColors ?? {}),
+          [user.uid]: 'white',
+        },
+        message: '黑子先手',
+      };
+    } else {
+      updatedRoom = {
+        ...existingRoom,
+        guestUid: user.uid,
+        status: 'playing',
+        updatedAt: Date.now(),
+        playerColors: { ...(existingRoom.playerColors ?? {}) },
+        message: '房主先翻第一顆棋子決定顏色',
+      };
     }
 
     await set(roomRef, serializeRoom(updatedRoom));
@@ -876,6 +1037,64 @@ export async function restartOnlineRoom(roomId: string) {
   await set(roomRef, serializeRoom(nextRoom));
 }
 
+export async function submitGomokuMove(roomId: string, pos: Position) {
+  requireConfiguredFirebase();
+  const db = requireDatabase();
+  const user = await ensureAnonymousAuth();
+  const roomRef = ref(db, `rooms/${roomId}`);
+  const snapshot = await get(roomRef);
+
+  if (!snapshot.exists()) {
+    throw new Error('找不到房間。');
+  }
+
+  const room = normalizeRoom(snapshot.val());
+  if (!room || room.variant !== 'gomoku') {
+    throw new Error('房間資料無效。');
+  }
+
+  if (room.phase !== 'playing' || room.status !== 'playing') {
+    throw new Error('這局已經結束。');
+  }
+
+  if (room.activePlayerUid !== user.uid) {
+    throw new Error('現在不是你的回合。');
+  }
+
+  if (!isValidGomokuMove(room.board, pos)) {
+    throw new Error('這個位置不能落子。');
+  }
+
+  const nextBoard = placeGomokuStone(room.board, pos, room.currentPlayer);
+  const nextPlayer = otherGomokuStone(room.currentPlayer);
+  const winner = checkGomokuWinner(nextBoard, pos);
+  const boardFull = isGomokuBoardFull(nextBoard);
+
+  room.board = nextBoard;
+  room.lastMove = { from: pos, to: pos };
+  room.updatedAt = Date.now();
+
+  if (winner) {
+    room.phase = 'gameOver';
+    room.status = 'finished';
+    room.winner = winner;
+    room.activePlayerUid = null;
+    room.message = `${winner === 'black' ? '黑子' : '白子'}獲勝`;
+  } else if (boardFull) {
+    room.phase = 'gameOver';
+    room.status = 'finished';
+    room.winner = null;
+    room.activePlayerUid = null;
+    room.message = '平手，棋盤已滿';
+  } else {
+    room.currentPlayer = nextPlayer;
+    room.activePlayerUid = findUidByColor(room, nextPlayer);
+    room.message = `${nextPlayer === 'black' ? '黑子' : '白子'}的回合`;
+  }
+
+  await set(roomRef, serializeRoom(room));
+}
+
 export async function submitBrightMove(
   roomId: string,
   from: Position,
@@ -917,7 +1136,7 @@ export async function submitBrightMove(
   }
 
   const nextBoard = moveBrightPiece(room.board, from, to);
-  const nextPlayer = otherColor(room.currentPlayer);
+  const nextPlayer = otherChessColor(room.currentPlayer);
   const winner = checkBrightWinner(nextBoard);
   const stalemate = checkBrightStalemate(nextBoard, nextPlayer);
 
@@ -991,17 +1210,17 @@ export async function submitDarkFlip(roomId: string, pos: Position) {
       room.playerColors[user.uid] = flippedPiece.color;
 
       if (opponentUid) {
-        room.playerColors[opponentUid] = otherColor(flippedPiece.color);
+        room.playerColors[opponentUid] = otherChessColor(flippedPiece.color);
       }
 
       room.isFlippingFirst = false;
-      room.currentPlayer = otherColor(flippedPiece.color);
+      room.currentPlayer = otherChessColor(flippedPiece.color);
       room.activePlayerUid = opponentUid;
       room.message = `${room.currentPlayer === 'red' ? '紅方' : '黑方'}的回合`;
       return room;
     }
 
-    const nextPlayer = otherColor(room.currentPlayer);
+    const nextPlayer = otherChessColor(room.currentPlayer);
     const winner = checkDarkWinner(nextBoard);
     const stalemate = checkDarkStalemate(nextBoard, nextPlayer);
 
@@ -1076,7 +1295,7 @@ export async function submitDarkMove(
     }
 
     const nextBoard = moveDarkPiece(room.board, from, to);
-    const nextPlayer = otherColor(room.currentPlayer);
+    const nextPlayer = otherChessColor(room.currentPlayer);
     const winner = checkDarkWinner(nextBoard);
     const stalemate = checkDarkStalemate(nextBoard, nextPlayer);
 

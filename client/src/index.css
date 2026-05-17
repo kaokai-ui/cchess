@@ -27,6 +27,10 @@ body {
   max-width: min(100%, calc((100dvh - 1.5rem) * 0.84), 980px);
 }
 
+.gomoku-board-shell {
+  max-width: min(100%, calc((100dvh - 13rem) * 0.96), 860px);
+}
+
 .dark-piece-flip-glow {
   animation: dark-piece-flip-glow 1s ease-out;
 }
@@ -63,6 +67,10 @@ body {
 @media (pointer: coarse) and (orientation: landscape) and (min-width: 768px) and (max-width: 1366px) {
   .bright-board-shell {
     max-width: min(100%, calc((100dvh - 1rem) * 0.95), 1080px);
+  }
+
+  .gomoku-board-shell {
+    max-width: min(100%, calc((100dvh - 11rem) * 1.02), 980px);
   }
 }
 
