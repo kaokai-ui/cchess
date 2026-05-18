@@ -15,14 +15,10 @@ import type {
 } from '../shared/gomoku/types';
 import { playLoseSound, playMoveSound, playWinSound } from '../utils/sound';
 
-type StarterOwner = 'player' | 'ai';
-
 interface MoveRecord {
   board: GomokuBoard;
   currentPlayer: GomokuStone;
-  playerStone: GomokuStone;
-  aiStone: GomokuStone;
-  starterOwner: StarterOwner;
+  starterStone: GomokuStone;
   lastMove: GomokuPosition | null;
   message: string;
 }
@@ -30,11 +26,11 @@ interface MoveRecord {
 interface GomokuGameStore {
   board: GomokuBoard;
   currentPlayer: GomokuStone;
+  starterStone: GomokuStone;
   phase: GomokuPhase;
   winner: GomokuStone | null;
   playerStone: GomokuStone;
   aiStone: GomokuStone;
-  starterOwner: StarterOwner;
   aiDifficulty: GomokuAIDifficulty;
   isAiThinking: boolean;
   lastMove: GomokuPosition | null;
@@ -57,59 +53,36 @@ function getNextStone(stone: GomokuStone): GomokuStone {
   return stone === 'black' ? 'white' : 'black';
 }
 
-function getStoneByStarter(starterOwner: StarterOwner) {
-  return {
-    playerStone: starterOwner === 'player' ? 'black' : 'white',
-    aiStone: starterOwner === 'player' ? 'white' : 'black',
-  } as const;
-}
-
-function getTurnMessage(currentPlayer: GomokuStone, playerStone: GomokuStone, lastMove: GomokuPosition | null) {
-  if (lastMove === null) {
+function getTurnMessage(currentPlayer: GomokuStone, playerStone: GomokuStone, isOpeningTurn: boolean) {
+  if (isOpeningTurn) {
     return currentPlayer === playerStone ? '你先手' : 'AI 先手';
   }
 
   return currentPlayer === playerStone ? '輪到你落子' : '輪到 AI 落子';
 }
 
-function getNextStarterOwner(
-  winner: GomokuStone | null,
-  playerStone: GomokuStone,
-  starterOwner: StarterOwner,
-): StarterOwner {
-  if (winner === null) {
-    return starterOwner;
-  }
-
-  return winner === playerStone ? 'player' : 'ai';
-}
-
 export const useGomokuGameStore = create<GomokuGameStore>((set, get) => {
-  const startRound = (
-    difficulty: GomokuAIDifficulty,
-    starterOwner: StarterOwner,
-  ) => {
-    const { playerStone, aiStone } = getStoneByStarter(starterOwner);
-    const currentPlayer: GomokuStone = 'black';
-    const message = getTurnMessage(currentPlayer, playerStone, null);
+  const startRound = (difficulty: GomokuAIDifficulty, starterStone: GomokuStone) => {
+    const playerStone: GomokuStone = 'black';
+    const aiStone: GomokuStone = 'white';
 
     set({
       board: createInitialBoard(),
-      currentPlayer,
+      currentPlayer: starterStone,
+      starterStone,
       phase: 'playing',
       winner: null,
       playerStone,
       aiStone,
-      starterOwner,
       aiDifficulty: difficulty,
       isAiThinking: false,
       lastMove: null,
-      message,
+      message: getTurnMessage(starterStone, playerStone, true),
       history: [],
       historyIndex: -1,
     });
 
-    if (currentPlayer === aiStone) {
+    if (starterStone === aiStone) {
       setTimeout(() => {
         get().executeAiTurn();
       }, AI_TURN_DELAY_MS);
@@ -126,7 +99,7 @@ export const useGomokuGameStore = create<GomokuGameStore>((set, get) => {
       lastMove,
       message,
       playerStone,
-      starterOwner,
+      starterStone,
     } = get();
 
     if (!isValidMove(board, pos)) {
@@ -140,9 +113,7 @@ export const useGomokuGameStore = create<GomokuGameStore>((set, get) => {
       {
         board,
         currentPlayer,
-        playerStone,
-        aiStone,
-        starterOwner,
+        starterStone,
         lastMove,
         message,
       },
@@ -162,12 +133,15 @@ export const useGomokuGameStore = create<GomokuGameStore>((set, get) => {
       set({
         board: nextBoard,
         currentPlayer: nextPlayer,
+        starterStone: winner,
         phase: 'gameOver',
         winner,
-        starterOwner: getNextStarterOwner(winner, playerStone, starterOwner),
         isAiThinking: false,
         lastMove: pos,
-        message: winner === playerStone ? '你贏了！下一局你先手。' : 'AI 贏了，下一局 AI 先手。',
+        message:
+          winner === playerStone
+            ? `你贏了！下一局由${winner === 'black' ? '黑子' : '白子'}先手。`
+            : `AI 贏了！下一局由${winner === 'black' ? '黑子' : '白子'}先手。`,
         history: nextHistory,
         historyIndex: historyIndex + 1,
       });
@@ -182,7 +156,7 @@ export const useGomokuGameStore = create<GomokuGameStore>((set, get) => {
         winner: null,
         isAiThinking: false,
         lastMove: pos,
-        message: '平手，下一局維持上一局先手方先下。',
+        message: `平手，下一局維持${starterStone === 'black' ? '黑子' : '白子'}先手。`,
         history: nextHistory,
         historyIndex: historyIndex + 1,
       });
@@ -196,7 +170,7 @@ export const useGomokuGameStore = create<GomokuGameStore>((set, get) => {
       winner: null,
       isAiThinking: false,
       lastMove: pos,
-      message: getTurnMessage(nextPlayer, playerStone, pos),
+      message: getTurnMessage(nextPlayer, playerStone, false),
       history: nextHistory,
       historyIndex: historyIndex + 1,
     });
@@ -211,11 +185,11 @@ export const useGomokuGameStore = create<GomokuGameStore>((set, get) => {
   return {
     board: createInitialBoard(),
     currentPlayer: 'black',
+    starterStone: 'black',
     phase: 'playing',
     winner: null,
     playerStone: 'black',
     aiStone: 'white',
-    starterOwner: 'player',
     aiDifficulty: 'hard',
     isAiThinking: false,
     lastMove: null,
@@ -224,7 +198,7 @@ export const useGomokuGameStore = create<GomokuGameStore>((set, get) => {
     historyIndex: -1,
 
     initGame: (difficulty: GomokuAIDifficulty) => {
-      startRound(difficulty, 'player');
+      startRound(difficulty, 'black');
     },
 
     handleCellClick: (pos: GomokuPosition) => {
@@ -278,19 +252,19 @@ export const useGomokuGameStore = create<GomokuGameStore>((set, get) => {
     },
 
     resetGame: () => {
-      const { aiDifficulty, starterOwner } = get();
-      startRound(aiDifficulty, starterOwner);
+      const { aiDifficulty, starterStone } = get();
+      startRound(aiDifficulty, starterStone);
     },
 
     leaveGame: () => {
       set({
         board: createInitialBoard(),
         currentPlayer: 'black',
+        starterStone: 'black',
         phase: 'playing',
         winner: null,
         playerStone: 'black',
         aiStone: 'white',
-        starterOwner: 'player',
         aiDifficulty: 'hard',
         isAiThinking: false,
         lastMove: null,
@@ -301,7 +275,7 @@ export const useGomokuGameStore = create<GomokuGameStore>((set, get) => {
     },
 
     undo: () => {
-      const { history, historyIndex } = get();
+      const { history, historyIndex, aiStone } = get();
 
       if (historyIndex < 0) {
         return;
@@ -312,18 +286,16 @@ export const useGomokuGameStore = create<GomokuGameStore>((set, get) => {
       set({
         board: previousState.board,
         currentPlayer: previousState.currentPlayer,
+        starterStone: previousState.starterStone,
         phase: 'playing',
         winner: null,
-        playerStone: previousState.playerStone,
-        aiStone: previousState.aiStone,
-        starterOwner: previousState.starterOwner,
         isAiThinking: false,
         lastMove: previousState.lastMove,
         message: previousState.message,
         historyIndex: historyIndex - 1,
       });
 
-      if (previousState.currentPlayer === previousState.aiStone) {
+      if (previousState.currentPlayer === aiStone) {
         setTimeout(() => {
           get().executeAiTurn();
         }, AI_TURN_DELAY_MS);

@@ -649,33 +649,28 @@ function createRematchRoom(room: OnlineRoom): OnlineRoom {
   }
 
   if (room.variant === 'gomoku') {
-    const previousBlackUid = findUidByColor(room, 'black') ?? room.hostUid;
-    const winnerUid =
-      room.winner === 'black' || room.winner === 'white'
-        ? findUidByColor(room, room.winner)
-        : null;
-    const starterUid = winnerUid ?? previousBlackUid;
-    const guestStarts = Boolean(room.guestUid && starterUid === room.guestUid);
+    const starterStone: GomokuStone =
+      room.winner === 'black' || room.winner === 'white' ? room.winner : 'black';
     const playerColors: Record<string, GomokuStone | null> = {
-      [room.hostUid]: guestStarts ? 'white' : 'black',
+      [room.hostUid]: 'black',
     };
 
     if (room.guestUid) {
-      playerColors[room.guestUid] = guestStarts ? 'black' : 'white';
+      playerColors[room.guestUid] = 'white';
     }
 
     return {
       ...room,
       status: hasGuest ? 'playing' : 'waiting',
       board: createGomokuBoard(),
-      currentPlayer: 'black',
-      activePlayerUid: starterUid,
+      currentPlayer: starterStone,
+      activePlayerUid: findUidByColor({ ...room, playerColors }, starterStone),
       playerColors,
       phase: 'playing',
       winner: null,
       isFlippingFirst: false,
       lastMove: null,
-      message: hasGuest ? '黑子先手' : '等待玩家加入房間',
+      message: hasGuest ? `${starterStone === 'black' ? '黑子' : '白子'}先手` : '等待玩家加入房間',
       updatedAt,
       darkChessSettings: null,
     };
