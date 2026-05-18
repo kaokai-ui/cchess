@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import GomokuBoard from '../components/GomokuBoard';
 import {
@@ -36,6 +36,18 @@ function getConnectionLabel(
   }
 
   return presence[uid]?.connected ? '已連線' : '離線';
+}
+
+function getRelativeOpeningMessage(room: GomokuOnlineRoom, myUid: string) {
+  if (!room.activePlayerUid) {
+    return room.message;
+  }
+
+  if (room.activePlayerUid === myUid) {
+    return '你先手';
+  }
+
+  return room.activePlayerUid === room.hostUid ? '屋主先手' : '對家先手';
 }
 
 const OnlineGomokuGame: React.FC = () => {
@@ -90,11 +102,31 @@ const OnlineGomokuGame: React.FC = () => {
     };
   }, [roomId]);
 
-  const myStone = room ? getPlayerColor(room, myUid) as GomokuStone | null : null;
+  const myStone = room ? (getPlayerColor(room, myUid) as GomokuStone | null) : null;
   const waitingForGuest = room?.status === 'waiting';
   const currentPlayerLabel = room ? getStoneLabel(room.currentPlayer) : '';
   const canPlay = Boolean(room && isPlayerTurn(room, myUid) && room.phase === 'playing');
   const lastMove = room?.lastMove?.to ?? null;
+
+  const statusMessage = useMemo(() => {
+    if (!room) {
+      return '';
+    }
+
+    if (waitingForGuest) {
+      return '等待對手加入';
+    }
+
+    if (room.phase === 'playing' && room.lastMove === null) {
+      return getRelativeOpeningMessage(room, myUid);
+    }
+
+    if (room.phase === 'playing') {
+      return canPlay ? '輪到你落子' : '輪到對家落子';
+    }
+
+    return room.message;
+  }, [canPlay, myUid, room, waitingForGuest]);
 
   const handleLeave = async () => {
     if (room) {
@@ -188,7 +220,7 @@ const OnlineGomokuGame: React.FC = () => {
             <div className="rounded-3xl border border-amber-200/70 bg-white/75 px-4 py-3 shadow-lg backdrop-blur">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <h1 className="text-2xl font-black tracking-[0.12em] text-stone-900 sm:text-3xl">
+                  <h1 className="text-xl font-black tracking-[0.08em] text-stone-900 sm:text-2xl">
                     五子棋連線
                   </h1>
                   <p className="mt-1 text-sm font-semibold text-stone-600 sm:text-base">
@@ -208,11 +240,11 @@ const OnlineGomokuGame: React.FC = () => {
             </div>
 
             <div className="rounded-3xl border border-stone-200 bg-white/80 px-4 py-3 shadow-lg backdrop-blur">
-              <p className="text-2xl font-black text-stone-900">
+              <p className="text-xl font-black text-stone-900">
                 {waitingForGuest ? '等待對手加入' : `目前輪到${currentPlayerLabel}`}
               </p>
               <p className="mt-2 text-base font-semibold leading-7 text-stone-700">
-                {room.message}
+                {statusMessage}
               </p>
             </div>
           </div>
@@ -249,7 +281,7 @@ const OnlineGomokuGame: React.FC = () => {
                 : '平手'}
             </h2>
             <p className="mt-4 text-base leading-7 text-stone-600 sm:text-lg">
-              {room.message}
+              {statusMessage}
             </p>
 
             <div className="mt-6 space-y-3">

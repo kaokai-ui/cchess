@@ -224,17 +224,7 @@ const Home: React.FC = () => {
               </p>
             </div>
 
-            <div className="mt-5 rounded-2xl bg-white px-4 py-4 text-sm leading-7 text-stone-600">
-              <p className="font-bold text-stone-800">目前開發節奏</p>
-              <p className="mt-2">
-                1. 五子棋單機與連線共用獨立規則
-                <br />
-                2. 明棋與暗棋 AI 保持原本邏輯
-                <br />
-                3. 多人對戰透過 Firebase 房間同步
-              </p>
-              <p className="mt-3 text-stone-500">版本：{appVersion}</p>
-            </div>
+            <p className="mt-5 text-sm text-stone-500">版本：{appVersion}</p>
           </aside>
         </div>
       </div>

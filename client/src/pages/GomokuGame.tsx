@@ -8,6 +8,13 @@ interface GomokuRouteState {
   difficulty?: GomokuAIDifficulty;
 }
 
+const difficultyLabelMap: Record<GomokuAIDifficulty, string> = {
+  easy: '簡單',
+  normal: '普通',
+  hard: '困難',
+  master: '棋聖',
+};
+
 const GomokuGame: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -37,12 +44,6 @@ const GomokuGame: React.FC = () => {
   }, [difficulty, initGame]);
 
   const currentPlayerLabel = currentPlayer === 'black' ? '黑子' : '白子';
-  const difficultyLabelMap: Record<GomokuAIDifficulty, string> = {
-    easy: '簡單',
-    normal: '普通',
-    hard: '困難',
-    master: '棋聖',
-  };
 
   return (
     <div className="flex min-h-screen flex-col overflow-hidden bg-[radial-gradient(circle_at_top,#fff4d5_0%,#f3d79a_42%,#e6bf7b_100%)]">

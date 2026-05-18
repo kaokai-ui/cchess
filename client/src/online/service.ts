@@ -649,12 +649,19 @@ function createRematchRoom(room: OnlineRoom): OnlineRoom {
   }
 
   if (room.variant === 'gomoku') {
+    const previousBlackUid = findUidByColor(room, 'black') ?? room.hostUid;
+    const winnerUid =
+      room.winner === 'black' || room.winner === 'white'
+        ? findUidByColor(room, room.winner)
+        : null;
+    const starterUid = winnerUid ?? previousBlackUid;
+    const guestStarts = Boolean(room.guestUid && starterUid === room.guestUid);
     const playerColors: Record<string, GomokuStone | null> = {
-      [room.hostUid]: 'black',
+      [room.hostUid]: guestStarts ? 'white' : 'black',
     };
 
     if (room.guestUid) {
-      playerColors[room.guestUid] = 'white';
+      playerColors[room.guestUid] = guestStarts ? 'black' : 'white';
     }
 
     return {
@@ -662,7 +669,7 @@ function createRematchRoom(room: OnlineRoom): OnlineRoom {
       status: hasGuest ? 'playing' : 'waiting',
       board: createGomokuBoard(),
       currentPlayer: 'black',
-      activePlayerUid: room.hostUid,
+      activePlayerUid: starterUid,
       playerColors,
       phase: 'playing',
       winner: null,
