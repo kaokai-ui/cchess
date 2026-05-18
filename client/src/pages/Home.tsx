@@ -102,7 +102,7 @@ const Home: React.FC = () => {
           </p>
         </div>
 
-        <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="mt-8 grid gap-5 lg:grid-cols-[minmax(0,1fr)_260px]">
           <div className="space-y-6">
             <section className="rounded-3xl border border-amber-100 bg-amber-50/70 p-5">
               <label className="mb-3 block text-lg font-black text-stone-800 sm:text-xl">
@@ -204,7 +204,7 @@ const Home: React.FC = () => {
             </div>
           </div>
 
-          <aside className="rounded-[2rem] border border-stone-200 bg-stone-50 p-5 shadow-inner">
+          <aside className="rounded-[2rem] border border-stone-200 bg-stone-50 p-4 shadow-inner">
             <p className="text-sm font-black uppercase tracking-[0.2em] text-stone-500">
               Service Status
             </p>
