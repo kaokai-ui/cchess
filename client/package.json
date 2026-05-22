@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "assets:pwa": "python scripts/generate-pwa-icons.py",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
@@ -34,6 +35,7 @@
     "tsx": "^4.21.0",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.2",
-    "vite": "^8.0.10"
+    "vite": "^8.0.10",
+    "vite-plugin-pwa": "^1.3.0"
   }
 }
