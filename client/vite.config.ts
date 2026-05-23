@@ -73,7 +73,11 @@ export default defineConfig(({ mode }) => {
           ],
         },
         workbox: {
+          cleanupOutdatedCaches: true,
+          clientsClaim: true,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest,json}'],
+          globIgnores: ['**/app-version.json'],
+          skipWaiting: true,
         },
       }),
       appVersionManifestPlugin(appVersion),
