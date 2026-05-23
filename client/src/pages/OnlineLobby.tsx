@@ -222,7 +222,7 @@ const OnlineLobby: React.FC = () => {
 
           <div className="space-y-3">
             <input
-              className="w-full rounded-2xl border border-amber-200 px-4 py-3 text-center text-lg uppercase tracking-[0.3em] text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+              className="w-full rounded-2xl border-2 border-amber-500 bg-amber-50 px-4 py-3 text-center text-lg font-bold uppercase tracking-[0.3em] text-amber-950 shadow-sm placeholder:text-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-600"
               placeholder="輸入房號"
               value={roomCode}
               maxLength={6}

@@ -327,6 +327,13 @@ const OnlineDarkGame: React.FC = () => {
             >
               離開房間
             </button>
+            <button
+              className="w-full px-4 py-3 bg-amber-600 text-white rounded-xl text-base font-bold disabled:opacity-60"
+              onClick={() => void handleRestart()}
+              disabled={restarting || waitingForGuest}
+            >
+              {restarting ? '重新開始中...' : '重新開始'}
+            </button>
 
             <div className="px-3 py-2.5 bg-white rounded-xl shadow-sm">
               <label className="block text-xs text-gray-500 mb-1">房號</label>
@@ -430,7 +437,7 @@ const OnlineDarkGame: React.FC = () => {
                   onClick={() => void handleRestart()}
                   disabled={restarting}
                 >
-                  {restarting ? '重新開始中...' : '繼續遊戲'}
+                  {restarting ? '重新開始中...' : '重新開始'}
                 </button>
               )}
               <button
