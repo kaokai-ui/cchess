@@ -320,20 +320,23 @@ const OnlineDarkGame: React.FC = () => {
     <div className="h-screen bg-gradient-to-b from-amber-50 to-amber-100 overflow-hidden">
       <div className="flex h-full min-h-0 flex-col gap-3 p-3 md:flex-row md:p-4">
         <aside className="flex-shrink-0 space-y-2 overflow-y-auto md:w-52 lg:w-56 xl:w-60">
-          <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
             <button
-              className="w-full px-4 py-3 bg-gray-700 text-white rounded-xl text-base font-bold"
+              className="w-full px-3 py-3 bg-gray-700 text-white rounded-xl text-sm font-bold sm:text-base"
               onClick={() => void handleLeave()}
             >
               離開房間
             </button>
             <button
-              className="w-full px-4 py-3 bg-amber-600 text-white rounded-xl text-base font-bold disabled:opacity-60"
+              className="w-full px-3 py-3 bg-amber-600 text-white rounded-xl text-sm font-bold disabled:opacity-60 sm:text-base"
               onClick={() => void handleRestart()}
               disabled={restarting || waitingForGuest}
             >
               {restarting ? '重新開始中...' : '重新開始'}
             </button>
+          </div>
+
+          <div className="space-y-3">
 
             <div className="px-3 py-2.5 bg-white rounded-xl shadow-sm">
               <label className="block text-xs text-gray-500 mb-1">房號</label>
