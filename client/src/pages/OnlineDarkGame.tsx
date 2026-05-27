@@ -216,6 +216,9 @@ const OnlineDarkGame: React.FC = () => {
 
   const myColor = room ? (getPlayerColor(room, myUid) as 'red' | 'black' | null) : null;
   const waitingForGuest = room?.status === 'waiting';
+  const waitingForReconnect = Boolean(
+    room && waitingForGuest && room.guestUid && room.reconnectDeadlineAt,
+  );
 
   const handleLeave = async () => {
     if (room) {
@@ -313,7 +316,9 @@ const OnlineDarkGame: React.FC = () => {
   }
 
   const turnText = room.isFlippingFirst
-    ? '房主先翻第一顆棋子'
+    ? room.activePlayerUid === myUid
+      ? '輪到你先翻第一顆棋子'
+      : '輪到對手先翻第一顆棋子'
     : `${room.currentPlayer === 'red' ? '紅方' : '黑方'}的回合`;
 
   return (
@@ -358,7 +363,7 @@ const OnlineDarkGame: React.FC = () => {
             <div className="bg-white rounded-xl px-3 py-2.5 shadow-sm">
               <p className="text-xs text-gray-500">房間狀態</p>
               <p className="text-base font-bold text-amber-900">
-                {waitingForGuest ? '等待對手加入' : turnText}
+                {waitingForGuest ? (waitingForReconnect ? '等待對手返回' : '等待對手加入') : turnText}
               </p>
             </div>
             <div className="bg-white rounded-xl px-3 py-2.5 shadow-sm">
@@ -411,7 +416,9 @@ const OnlineDarkGame: React.FC = () => {
           <div className="bg-white rounded-3xl shadow-2xl p-6 sm:p-8 max-w-sm w-full text-center space-y-4">
             <h2 className="text-2xl sm:text-3xl font-bold text-amber-900">
               {waitingForGuest
-                ? '等待對手加入'
+                ? waitingForReconnect
+                  ? '等待對手返回'
+                  : '等待對手加入'
                 : room.status === 'abandoned'
                   ? '房間已中斷'
                   : room.winner === myColor

@@ -6,6 +6,7 @@ export type GameVariant = 'bright' | 'dark' | 'gomoku';
 export type OnlineRoomStatus = 'waiting' | 'playing' | 'finished' | 'abandoned';
 export type OnlinePlayerColor = PieceColor | GomokuStone;
 export type OnlineRoomBoard = Board | GomokuBoard;
+export type OnlineReconnectSeat = 'host' | 'guest';
 
 export interface PresenceSnapshot {
   connected: boolean;
@@ -24,6 +25,10 @@ interface OnlineRoomBase {
   message: string;
   createdAt: number;
   updatedAt: number;
+  reconnectSeat: OnlineReconnectSeat | null;
+  reconnectPlayerKey: string | null;
+  reconnectDeadlineAt: number | null;
+  pausedMessage: string | null;
 }
 
 export interface BrightOnlineRoom extends OnlineRoomBase {

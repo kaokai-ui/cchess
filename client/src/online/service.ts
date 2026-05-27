@@ -46,6 +46,7 @@ import type {
   GameVariant,
   OnlineRoom,
   OnlinePlayerColor,
+  OnlineReconnectSeat,
   OnlineRoomReconnectResult,
   OnlineRoomSnapshot,
   PresenceSnapshot,
@@ -54,6 +55,7 @@ import type {
 
 const ROOM_CODE_ALPHABET = '0123456789';
 const ROOM_CODE_LENGTH = 5;
+const ROOM_RECONNECT_WINDOW_MS = 10 * 60 * 1000;
 const EMPTY_CELL_MARKER = 0;
 const ONLINE_PLAYER_KEY_STORAGE_KEY = 'cchess-online-player-key';
 const RECENT_ONLINE_ROOM_STORAGE_KEY = 'cchess-online-room-session';
@@ -64,7 +66,7 @@ const BOARD_DIMENSIONS = {
 } as const;
 
 type SerializedBoardCell = Piece | GomokuStone | typeof EMPTY_CELL_MARKER;
-type RoomSeat = 'host' | 'guest';
+type RoomSeat = OnlineReconnectSeat;
 
 interface UserSessionPayload {
   connected: boolean;
@@ -329,6 +331,15 @@ function normalizeRoom(value: unknown): OnlineRoom | null {
     message: typeof value.message === 'string' ? value.message : '',
     createdAt: typeof value.createdAt === 'number' ? value.createdAt : Date.now(),
     updatedAt: typeof value.updatedAt === 'number' ? value.updatedAt : Date.now(),
+    reconnectSeat:
+      value.reconnectSeat === 'host' || value.reconnectSeat === 'guest'
+        ? value.reconnectSeat
+        : null,
+    reconnectPlayerKey:
+      typeof value.reconnectPlayerKey === 'string' ? value.reconnectPlayerKey : null,
+    reconnectDeadlineAt:
+      typeof value.reconnectDeadlineAt === 'number' ? value.reconnectDeadlineAt : null,
+    pausedMessage: typeof value.pausedMessage === 'string' ? value.pausedMessage : null,
   } as const;
 
   if (variant === 'gomoku') {
@@ -495,6 +506,58 @@ function setSeatUid(room: OnlineRoom, seat: RoomSeat, uid: string) {
   room.guestUid = uid;
 }
 
+function clearReconnectState(room: OnlineRoom) {
+  room.reconnectSeat = null;
+  room.reconnectPlayerKey = null;
+  room.reconnectDeadlineAt = null;
+  room.pausedMessage = null;
+}
+
+function hasReconnectReservation(room: OnlineRoom) {
+  return Boolean(room.reconnectSeat && room.reconnectPlayerKey && room.reconnectDeadlineAt);
+}
+
+function isReconnectWindowActive(room: OnlineRoom, now = Date.now()) {
+  return hasReconnectReservation(room) && (room.reconnectDeadlineAt as number) > now;
+}
+
+function getReconnectSeatUserId(room: OnlineRoom) {
+  return room.reconnectSeat ? getSeatUid(room, room.reconnectSeat) : null;
+}
+
+function getReconnectResumeMessage(room: OnlineRoom) {
+  if (room.pausedMessage) {
+    return room.pausedMessage;
+  }
+
+  if (room.variant === 'bright') {
+    return `${room.currentPlayer === 'red' ? '紅方' : '黑方'}的回合`;
+  }
+
+  if (room.variant === 'gomoku') {
+    return `${room.currentPlayer === 'black' ? '黑子' : '白子'}先手`;
+  }
+
+  if (room.isFlippingFirst) {
+    return room.activePlayerUid === room.hostUid
+      ? '房主先翻第一顆棋子決定顏色'
+      : '上一局獲勝者先翻第一顆棋子決定顏色';
+  }
+
+  return `${room.currentPlayer === 'red' ? '紅方' : '黑方'}的回合`;
+}
+
+function resumeRoomFromReconnect(room: OnlineRoom) {
+  room.status = room.guestUid ? 'playing' : 'waiting';
+  room.message = getReconnectResumeMessage(room);
+  room.updatedAt = Date.now();
+  clearReconnectState(room);
+}
+
+function getReconnectReservationError() {
+  return '房間正在保留給原玩家，對方可在 10 分鐘內用原房號返回繼續遊戲。';
+}
+
 function applySeatReclaim(room: OnlineRoom, seat: RoomSeat, uid: string) {
   const previousUid = getSeatUid(room, seat);
   if (!previousUid || previousUid === uid) {
@@ -510,6 +573,39 @@ function applySeatReclaim(room: OnlineRoom, seat: RoomSeat, uid: string) {
 
   room.updatedAt = Date.now();
   return true;
+}
+
+async function resolveExpiredReconnectReservation(roomId: string) {
+  const db = requireDatabase();
+  const roomRef = ref(db, `rooms/${roomId}`);
+
+  const result = await runTransaction(
+    roomRef,
+    (current) => {
+      const room = normalizeRoom(current);
+      if (!room || !hasReconnectReservation(room) || isReconnectWindowActive(room)) {
+        return current;
+      }
+
+      const reconnectSeat = room.reconnectSeat;
+      const remainingUid =
+        reconnectSeat === 'host' ? room.guestUid : reconnectSeat === 'guest' ? room.hostUid : null;
+      const remainingColor = remainingUid ? room.playerColors?.[remainingUid] : null;
+
+      room.status = 'abandoned';
+      room.phase = 'gameOver';
+      room.activePlayerUid = null;
+      room.updatedAt = Date.now();
+      room.message = '對手未在 10 分鐘內返回，對局已結束。';
+      room.winner = remainingColor ?? null;
+      clearReconnectState(room);
+
+      return serializeRoom(room);
+    },
+    { applyLocally: false },
+  );
+
+  return result.committed;
 }
 
 async function upsertUserSession(userId: string, payload: UserSessionPayload) {
@@ -570,6 +666,10 @@ function createInitialRoom(
       message: '等待對手加入房間',
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      reconnectSeat: null,
+      reconnectPlayerKey: null,
+      reconnectDeadlineAt: null,
+      pausedMessage: null,
       darkChessSettings: null,
     };
   }
@@ -594,6 +694,10 @@ function createInitialRoom(
       message: '等待玩家加入房間',
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      reconnectSeat: null,
+      reconnectPlayerKey: null,
+      reconnectDeadlineAt: null,
+      pausedMessage: null,
       darkChessSettings: null,
     };
   }
@@ -615,6 +719,10 @@ function createInitialRoom(
     message: '等待對手加入房間',
     createdAt: Date.now(),
     updatedAt: Date.now(),
+    reconnectSeat: null,
+    reconnectPlayerKey: null,
+    reconnectDeadlineAt: null,
+    pausedMessage: null,
     darkChessSettings,
   };
 }
@@ -645,6 +753,10 @@ function createRematchRoom(room: OnlineRoom): OnlineRoom {
       lastMove: null,
       message: hasGuest ? '紅方先行' : '等待對手加入房間',
       updatedAt,
+      reconnectSeat: null,
+      reconnectPlayerKey: null,
+      reconnectDeadlineAt: null,
+      pausedMessage: null,
     };
   }
 
@@ -672,23 +784,41 @@ function createRematchRoom(room: OnlineRoom): OnlineRoom {
       lastMove: null,
       message: hasGuest ? `${starterStone === 'black' ? '黑子' : '白子'}先手` : '等待玩家加入房間',
       updatedAt,
+      reconnectSeat: null,
+      reconnectPlayerKey: null,
+      reconnectDeadlineAt: null,
+      pausedMessage: null,
       darkChessSettings: null,
     };
   }
+
+  const starterUid =
+    room.winner === 'red' || room.winner === 'black'
+      ? findUidByColor(room, room.winner)
+      : room.hostUid;
 
   return {
     ...room,
     status: hasGuest ? 'playing' : 'waiting',
     board: createDarkBoard(),
     currentPlayer: 'red',
-    activePlayerUid: room.hostUid,
+    activePlayerUid: starterUid ?? room.hostUid,
     playerColors: {},
     phase: 'playing',
     winner: null,
     isFlippingFirst: true,
     lastMove: null,
-    message: hasGuest ? '房主先翻第一顆棋子決定顏色' : '等待對手加入房間',
+    message:
+      hasGuest
+        ? room.winner
+          ? '上一局獲勝者先翻第一顆棋子決定顏色'
+          : '房主先翻第一顆棋子決定顏色'
+        : '等待對手加入房間',
     updatedAt,
+    reconnectSeat: null,
+    reconnectPlayerKey: null,
+    reconnectDeadlineAt: null,
+    pausedMessage: null,
   };
 }
 
@@ -751,6 +881,7 @@ async function attemptSeatReclaim(
   roomId: string,
   seat: RoomSeat,
   userId: string,
+  playerKey: string,
 ) {
   const db = requireDatabase();
   const roomRef = ref(db, `rooms/${roomId}`);
@@ -764,8 +895,55 @@ async function attemptSeatReclaim(
           return current;
         }
 
+        if (
+          room.reconnectSeat !== seat ||
+          room.reconnectPlayerKey !== playerKey ||
+          !isReconnectWindowActive(room)
+        ) {
+          return current;
+        }
+
         const changed = applySeatReclaim(room, seat, userId);
-        return changed ? serializeRoom(room) : current;
+        if (!changed) {
+          return current;
+        }
+
+        resumeRoomFromReconnect(room);
+        return serializeRoom(room);
+      },
+      { applyLocally: false },
+    );
+
+    return result.committed;
+  } catch (error) {
+    if (isPermissionDeniedError(error)) {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
+async function resumeReconnectReservation(roomId: string, userId: string) {
+  const db = requireDatabase();
+  const roomRef = ref(db, `rooms/${roomId}`);
+
+  try {
+    const result = await runTransaction(
+      roomRef,
+      (current) => {
+        const room = normalizeRoom(current);
+        if (
+          !room ||
+          !hasReconnectReservation(room) ||
+          !isReconnectWindowActive(room) ||
+          getReconnectSeatUserId(room) !== userId
+        ) {
+          return current;
+        }
+
+        resumeRoomFromReconnect(room);
+        return serializeRoom(room);
       },
       { applyLocally: false },
     );
@@ -786,6 +964,7 @@ export async function reconnectOnlineRoom(
   requireConfiguredFirebase();
   const normalizedRoomId = roomId.trim().toUpperCase();
   const user = await ensureAnonymousAuth();
+  const playerKey = getOrCreateOnlinePlayerKey();
   await ensureUserSessionIdentity(user.uid);
 
   let room = await readRoom(normalizedRoomId);
@@ -801,11 +980,26 @@ export async function reconnectOnlineRoom(
 
   let reclaimed = false;
 
+  if (hasReconnectReservation(room) && !isReconnectWindowActive(room)) {
+    await resolveExpiredReconnectReservation(normalizedRoomId);
+    room = await readRoom(normalizedRoomId);
+  }
+
+  if (!room) {
+    clearRecentOnlineRoomSession(normalizedRoomId);
+    return {
+      room: null,
+      userId: user.uid,
+      isMember: false,
+      reclaimed: false,
+    };
+  }
+
   if (room.hostUid !== user.uid && room.guestUid !== user.uid) {
-    const hostReclaimed = await attemptSeatReclaim(normalizedRoomId, 'host', user.uid);
+    const hostReclaimed = await attemptSeatReclaim(normalizedRoomId, 'host', user.uid, playerKey);
     const guestReclaimed = hostReclaimed
       ? false
-      : await attemptSeatReclaim(normalizedRoomId, 'guest', user.uid);
+      : await attemptSeatReclaim(normalizedRoomId, 'guest', user.uid, playerKey);
 
     reclaimed = hostReclaimed || guestReclaimed;
     room = await readRoom(normalizedRoomId);
@@ -814,6 +1008,11 @@ export async function reconnectOnlineRoom(
   const isMember = Boolean(room && (room.hostUid === user.uid || room.guestUid === user.uid));
 
   if (room && isMember) {
+    if (hasReconnectReservation(room) && isReconnectWindowActive(room)) {
+      await resumeReconnectReservation(normalizedRoomId, user.uid);
+      room = (await readRoom(normalizedRoomId)) ?? room;
+    }
+
     await registerPresence(normalizedRoomId, user.uid, room.variant);
   }
 
@@ -877,60 +1076,72 @@ export async function joinOnlineRoom(roomId: string) {
     throw new Error('房間資料格式異常。');
   }
 
+  if (hasReconnectReservation(existingRoom) && !isReconnectWindowActive(existingRoom)) {
+    await resolveExpiredReconnectReservation(normalizedRoomId);
+  }
+
   const reconnectResult = await reconnectOnlineRoom(normalizedRoomId);
   if (reconnectResult.isMember) {
     return normalizedRoomId;
   }
 
-  if (existingRoom.hostUid === user.uid && !reconnectResult.isMember) {
+  const latestRoom = (await readRoom(normalizedRoomId)) ?? existingRoom;
+
+  if (latestRoom.hostUid === user.uid && !reconnectResult.isMember) {
     throw new Error('目前這個瀏覽器就是房主，請用無痕視窗或另一個瀏覽器模擬第二位玩家。');
   }
 
-  if (existingRoom.status !== 'waiting') {
+  if (hasReconnectReservation(latestRoom) && isReconnectWindowActive(latestRoom)) {
+    throw new Error(getReconnectReservationError());
+  }
+
+  if (latestRoom.status !== 'waiting') {
     throw new Error('房間已開始或已結束，無法加入。');
   }
 
-  if (existingRoom.guestUid) {
+  if (latestRoom.guestUid) {
     throw new Error('房間已滿員。');
   }
 
   try {
     let updatedRoom: OnlineRoom;
 
-    if (existingRoom.variant === 'bright') {
+    if (latestRoom.variant === 'bright') {
       updatedRoom = {
-        ...existingRoom,
+        ...latestRoom,
         guestUid: user.uid,
         status: 'playing',
         updatedAt: Date.now(),
         playerColors: {
-          ...(existingRoom.playerColors ?? {}),
+          ...(latestRoom.playerColors ?? {}),
           [user.uid]: 'black',
         },
         message: '紅方先行',
       };
-    } else if (existingRoom.variant === 'gomoku') {
+    } else if (latestRoom.variant === 'gomoku') {
       updatedRoom = {
-        ...existingRoom,
+        ...latestRoom,
         guestUid: user.uid,
         status: 'playing',
         updatedAt: Date.now(),
         playerColors: {
-          ...(existingRoom.playerColors ?? {}),
+          ...(latestRoom.playerColors ?? {}),
           [user.uid]: 'white',
         },
         message: '黑子先手',
       };
     } else {
       updatedRoom = {
-        ...existingRoom,
+        ...latestRoom,
         guestUid: user.uid,
         status: 'playing',
         updatedAt: Date.now(),
-        playerColors: { ...(existingRoom.playerColors ?? {}) },
+        playerColors: { ...(latestRoom.playerColors ?? {}) },
         message: '房主先翻第一顆棋子決定顏色',
       };
     }
+
+    clearReconnectState(updatedRoom);
 
     await set(roomRef, serializeRoom(updatedRoom));
   } catch (error) {
@@ -968,9 +1179,16 @@ export async function leaveOnlineRoom(roomId: string) {
   requireConfiguredFirebase();
   const db = requireDatabase();
   const user = await ensureAnonymousAuth();
+  const playerKey = getOrCreateOnlinePlayerKey();
   const roomRef = ref(db, `rooms/${roomId}`);
   const roomSnapshot = await get(roomRef);
   const room = roomSnapshot.exists() ? normalizeRoom(roomSnapshot.val()) : null;
+  const shouldKeepRecentSession = Boolean(
+    room &&
+      room.phase === 'playing' &&
+      room.status === 'playing' &&
+      findOpponentUid(room, user.uid),
+  );
 
   await runTransaction(
     roomRef,
@@ -990,13 +1208,26 @@ export async function leaveOnlineRoom(roomId: string) {
 
       const remainingUid = findOpponentUid(room, user.uid);
       const remainingColor = remainingUid ? room.playerColors?.[remainingUid] : null;
+      const now = Date.now();
+
+      if (room.phase === 'playing' && room.status === 'playing' && remainingUid) {
+        room.status = 'waiting';
+        room.updatedAt = now;
+        room.reconnectSeat = room.hostUid === user.uid ? 'host' : 'guest';
+        room.reconnectPlayerKey = playerKey;
+        room.reconnectDeadlineAt = now + ROOM_RECONNECT_WINDOW_MS;
+        room.pausedMessage = room.message;
+        room.message = '對手已離開房間，10 分鐘內可用原房號返回繼續遊戲。';
+        return serializeRoom(room);
+      }
 
       room.status = 'abandoned';
       room.phase = 'gameOver';
       room.activePlayerUid = null;
-      room.updatedAt = Date.now();
+      room.updatedAt = now;
       room.message = '對手已離開房間';
       room.winner = remainingColor ?? null;
+      clearReconnectState(room);
 
       return serializeRoom(room);
     },
@@ -1004,7 +1235,9 @@ export async function leaveOnlineRoom(roomId: string) {
   );
 
   await clearPresence(roomId, user.uid, room?.variant ?? null);
-  clearRecentOnlineRoomSession(roomId);
+  if (!shouldKeepRecentSession) {
+    clearRecentOnlineRoomSession(roomId);
+  }
 }
 
 export async function restartOnlineRoom(roomId: string) {
