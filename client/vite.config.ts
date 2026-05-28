@@ -37,8 +37,8 @@ export default defineConfig(({ mode }) => {
         ],
         manifest: {
           id: basePath,
-          name: 'CChess',
-          short_name: 'CChess',
+          name: '象棋',
+          short_name: '象棋',
           description: 'Chinese chess, dark chess, and gomoku for tablet-friendly play.',
           start_url: basePath,
           scope: basePath,
