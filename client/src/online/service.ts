@@ -1565,6 +1565,45 @@ export async function submitDarkMove(
   await set(roomRef, serializeRoom(nextRoom));
 }
 
+export async function submitDarkSurrender(roomId: string) {
+  requireConfiguredFirebase();
+  const db = requireDatabase();
+  const user = await ensureAnonymousAuth();
+  const roomRef = ref(db, `rooms/${roomId}`);
+  const snapshot = await get(roomRef);
+  if (!snapshot.exists()) {
+    throw new Error('房間不存在。');
+  }
+
+  const room = normalizeRoom(snapshot.val());
+  if (!room || room.variant !== 'dark') {
+    throw new Error('房間資料格式異常。');
+  }
+
+  if (room.phase !== 'playing' || room.status !== 'playing') {
+    throw new Error('目前對局已結束。');
+  }
+
+  if (room.hostUid !== user.uid && room.guestUid !== user.uid) {
+    throw new Error('你不在這個房間內。');
+  }
+
+  const surrenderColor = room.playerColors?.[user.uid] ?? null;
+  if (surrenderColor !== 'red' && surrenderColor !== 'black') {
+    throw new Error('尚未分出紅黑，暫時無法投降。');
+  }
+
+  const winner = otherChessColor(surrenderColor);
+  room.phase = 'gameOver';
+  room.status = 'finished';
+  room.winner = winner;
+  room.activePlayerUid = null;
+  room.updatedAt = Date.now();
+  room.message = `${surrenderColor === 'red' ? '紅子' : '黑子'}投降，本局${winner === 'red' ? '紅子' : '黑子'}獲勝`;
+
+  await set(roomRef, serializeRoom(room));
+}
+
 export function subscribeToOnlineRoom(
   roomId: string,
   callback: (snapshot: OnlineRoomSnapshot) => void,

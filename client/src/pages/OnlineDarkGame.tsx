@@ -11,6 +11,7 @@ import {
   restartOnlineRoom,
   submitDarkFlip,
   submitDarkMove,
+  submitDarkSurrender,
   subscribeToOnlineRoom,
 } from '../online/service';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -111,6 +112,7 @@ const OnlineDarkGame: React.FC = () => {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(true);
   const [restarting, setRestarting] = useState(false);
+  const [surrendering, setSurrendering] = useState(false);
   const previousRoomRef = useRef<DarkOnlineRoom | null>(null);
   const flipCueTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -219,6 +221,13 @@ const OnlineDarkGame: React.FC = () => {
   const waitingForReconnect = Boolean(
     room && waitingForGuest && room.guestUid && room.reconnectDeadlineAt,
   );
+  const canSurrender = Boolean(
+    room &&
+      room.phase === 'playing' &&
+      room.status === 'playing' &&
+      myColor &&
+      !waitingForGuest,
+  );
 
   const handleLeave = async () => {
     if (room) {
@@ -291,6 +300,25 @@ const OnlineDarkGame: React.FC = () => {
     }
   };
 
+  const handleSurrender = async () => {
+    if (!room) {
+      return;
+    }
+
+    try {
+      setSurrendering(true);
+      setError('');
+      setSelectedCell(null);
+      await submitDarkSurrender(room.roomId);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : '投降失敗，請稍後再試。',
+      );
+    } finally {
+      setSurrendering(false);
+    }
+  };
+
   if (busy) {
     return (
       <div className="min-h-screen bg-amber-50 flex items-center justify-center text-xl text-amber-900">
@@ -325,7 +353,7 @@ const OnlineDarkGame: React.FC = () => {
     <div className="h-screen bg-gradient-to-b from-amber-50 to-amber-100 overflow-hidden">
       <div className="flex h-full min-h-0 flex-col gap-3 p-3 md:flex-row md:p-4">
         <aside className="flex-shrink-0 space-y-2 overflow-y-auto md:w-52 lg:w-56 xl:w-60">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <button
               className="w-full px-3 py-3 bg-gray-700 text-white rounded-xl text-sm font-bold sm:text-base"
               onClick={() => void handleLeave()}
@@ -338,6 +366,13 @@ const OnlineDarkGame: React.FC = () => {
               disabled={restarting || waitingForGuest}
             >
               {restarting ? '重新開始中...' : '重新開始'}
+            </button>
+            <button
+              className="w-full px-3 py-3 bg-rose-600 text-white rounded-xl text-sm font-bold disabled:opacity-60 sm:text-base"
+              onClick={() => void handleSurrender()}
+              disabled={restarting || surrendering || !canSurrender}
+            >
+              {surrendering ? '投降中...' : '投降'}
             </button>
           </div>
 
@@ -447,14 +482,14 @@ const OnlineDarkGame: React.FC = () => {
                   onClick={() => void handleRestart()}
                   disabled={restarting}
                 >
-                  {restarting ? '重新開始中...' : '重新開始'}
+                  {restarting ? '重新開始中...' : '繼續遊戲'}
                 </button>
               )}
               <button
                 className="w-full py-3 bg-gray-700 text-white text-lg font-bold rounded-2xl"
                 onClick={() => void handleLeave()}
               >
-                返回主選單
+                離開遊戲
               </button>
             </div>
           </div>
