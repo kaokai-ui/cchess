@@ -18,6 +18,11 @@ const DEFAULT_SETTINGS: DarkChessSettings = {
   soldierKillGeneral: true,
 };
 
+// Module-level fallback ruleset. Solo play passes settings explicitly (see the
+// `settings` parameters below); the online path (service.ts `withDarkRuleSet`)
+// still sets this via setSettings() and relies on the parameter defaults, so it
+// is left untouched. Because callers that pass `settings` never read this value,
+// the previous solo/online cross-contamination hazard no longer applies.
 let currentSettings: DarkChessSettings = { ...DEFAULT_SETTINGS };
 
 export function setSettings(settings: DarkChessSettings) {
@@ -82,7 +87,11 @@ export function flipPiece(board: Board, pos: Position): Board {
   return newBoard;
 }
 
-export function canCapture(attacker: Piece, defender: Piece): boolean {
+export function canCapture(
+  attacker: Piece,
+  defender: Piece,
+  settings: DarkChessSettings = currentSettings,
+): boolean {
   if (attacker.color === defender.color) return false;
 
   // In dark chess, cannon capture legality depends on the jump rule,
@@ -91,7 +100,7 @@ export function canCapture(attacker: Piece, defender: Piece): boolean {
     return true;
   }
 
-  if (!currentSettings.soldierKillGeneral) {
+  if (!settings.soldierKillGeneral) {
     if (defender.type === 'general' && attacker.type === 'soldier') {
       return false;
     }
@@ -100,7 +109,7 @@ export function canCapture(attacker: Piece, defender: Piece): boolean {
       return true;
     }
   }
-  
+
   if (attacker.type === 'general' && defender.type === 'soldier') {
     return false;
   }
@@ -112,7 +121,8 @@ export function canMoveTo(
   board: Board,
   from: Position,
   to: Position,
-  currentPlayer: PieceColor
+  currentPlayer: PieceColor,
+  settings: DarkChessSettings = currentSettings,
 ): boolean {
   const fromCell = board[from.row][from.col];
   const toCell = board[to.row][to.col];
@@ -151,13 +161,13 @@ export function canMoveTo(
       }
     }
 
-    if (currentSettings.cannonCaptureRule === 'direct') {
-      return piecesInBetween === 0 && canCapture(fromCell, toCell);
+    if (settings.cannonCaptureRule === 'direct') {
+      return piecesInBetween === 0 && canCapture(fromCell, toCell, settings);
     }
 
     if (rowDiff + colDiff === 1) return false;
-    return piecesInBetween === 1 && canCapture(fromCell, toCell);
-  } else if (fromCell.type === 'chariot' && currentSettings.rookCaptureRange === 'fullLine') {
+    return piecesInBetween === 1 && canCapture(fromCell, toCell, settings);
+  } else if (fromCell.type === 'chariot' && settings.rookCaptureRange === 'fullLine') {
     if (!isStraightLine) return false;
 
     if (rowDiff > 0) {
@@ -174,17 +184,18 @@ export function canMoveTo(
       }
     }
 
-    return canCapture(fromCell, toCell);
+    return canCapture(fromCell, toCell, settings);
   } else {
     // Other pieces: adjacent only
-    return rowDiff + colDiff === 1 && canCapture(fromCell, toCell);
+    return rowDiff + colDiff === 1 && canCapture(fromCell, toCell, settings);
   }
 }
 
 export function getValidMoves(
   board: Board,
   pos: Position,
-  currentPlayer: PieceColor
+  currentPlayer: PieceColor,
+  settings: DarkChessSettings = currentSettings,
 ): Position[] {
   const moves: Position[] = [];
   const cell = board[pos.row][pos.col];
@@ -197,33 +208,34 @@ export function getValidMoves(
       const r = pos.row + dr;
       const c = pos.col + dc;
       if (r >= 0 && r < ROWS && c >= 0 && c < COLS) {
-        if (canMoveTo(board, pos, { row: r, col: c }, currentPlayer)) {
+        if (canMoveTo(board, pos, { row: r, col: c }, currentPlayer, settings)) {
           moves.push({ row: r, col: c });
         }
       }
     }
-    // Cannon captures: scan row and col
+    // Cannon captures: scan row and col. Adjacent cells (distance 1) are already
+    // produced by the adjacency loop above, so skip them here to avoid duplicates.
     for (let r = 0; r < ROWS; r++) {
-      if (r !== pos.row) {
-        if (canMoveTo(board, pos, { row: r, col: pos.col }, currentPlayer)) {
+      if (Math.abs(r - pos.row) > 1) {
+        if (canMoveTo(board, pos, { row: r, col: pos.col }, currentPlayer, settings)) {
           moves.push({ row: r, col: pos.col });
         }
       }
     }
     for (let c = 0; c < COLS; c++) {
-      if (c !== pos.col) {
-        if (canMoveTo(board, pos, { row: pos.row, col: c }, currentPlayer)) {
+      if (Math.abs(c - pos.col) > 1) {
+        if (canMoveTo(board, pos, { row: pos.row, col: c }, currentPlayer, settings)) {
           moves.push({ row: pos.row, col: c });
         }
       }
     }
-  } else if (cell.type === 'chariot' && currentSettings.rookCaptureRange === 'fullLine') {
+  } else if (cell.type === 'chariot' && settings.rookCaptureRange === 'fullLine') {
     const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
     for (const [dr, dc] of dirs) {
       let r = pos.row + dr;
       let c = pos.col + dc;
       while (r >= 0 && r < ROWS && c >= 0 && c < COLS) {
-        if (canMoveTo(board, pos, { row: r, col: c }, currentPlayer)) {
+        if (canMoveTo(board, pos, { row: r, col: c }, currentPlayer, settings)) {
           moves.push({ row: r, col: c });
         }
 
@@ -242,7 +254,7 @@ export function getValidMoves(
       const r = pos.row + dr;
       const c = pos.col + dc;
       if (r >= 0 && r < ROWS && c >= 0 && c < COLS) {
-        if (canMoveTo(board, pos, { row: r, col: c }, currentPlayer)) {
+        if (canMoveTo(board, pos, { row: r, col: c }, currentPlayer, settings)) {
           moves.push({ row: r, col: c });
         }
       }
@@ -297,13 +309,14 @@ export function countUnrevealed(board: Board): number {
 
 export function hasAnyValidMove(
   board: Board,
-  color: PieceColor
+  color: PieceColor,
+  settings: DarkChessSettings = currentSettings,
 ): boolean {
   for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col < COLS; col++) {
       const cell = board[row][col];
       if (cell && cell.revealed && cell.color === color) {
-        if (getValidMoves(board, { row, col }, color).length > 0) {
+        if (getValidMoves(board, { row, col }, color, settings).length > 0) {
           return true;
         }
       }
@@ -327,9 +340,10 @@ export function checkWinner(board: Board): PieceColor | null {
 
 export function checkStalemate(
   board: Board,
-  currentPlayer: PieceColor
+  currentPlayer: PieceColor,
+  settings: DarkChessSettings = currentSettings,
 ): boolean {
-  const hasMoves = hasAnyValidMove(board, currentPlayer);
+  const hasMoves = hasAnyValidMove(board, currentPlayer, settings);
   const hasFlips = getValidFlips(board).length > 0;
   const unrevealed = countUnrevealed(board);
 
@@ -339,7 +353,7 @@ export function checkStalemate(
 
   if (!hasMoves && unrevealed > 0 && !hasFlips) {
     const opponent: PieceColor = currentPlayer === 'red' ? 'black' : 'red';
-    const opponentHasMoves = hasAnyValidMove(board, opponent);
+    const opponentHasMoves = hasAnyValidMove(board, opponent, settings);
     if (!opponentHasMoves) {
       return true;
     }

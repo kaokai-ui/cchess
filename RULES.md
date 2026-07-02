@@ -89,3 +89,10 @@ AI 只會在下列條件同時成立時主動認輸：
   - `標準慢`: flip cue animation plays for about `700ms`
   - `長輩更慢`: flip cue animation plays for about `2000ms`
 - This setting does not add an extra pre-flip wait of `2000ms`.
+
+## 9. Captured Pieces Display
+
+- In both solo Dark Chess and online Dark Chess, captured pieces are shown beside the board.
+- The left tray shows captured black pieces.
+- The right tray shows captured red pieces.
+- The trays are derived from the remaining pieces on the board, so they stay in sync with the current game state.

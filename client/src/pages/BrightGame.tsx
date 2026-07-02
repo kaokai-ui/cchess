@@ -8,13 +8,15 @@ import type { AIDifficulty } from '../stores/brightGameStore';
 const BrightGame: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { playerColor: routePlayerColor, difficulty } = location.state as {
+  const routeState = location.state as {
     playerColor?: PieceColor;
-    difficulty: AIDifficulty;
-  };
+    difficulty?: AIDifficulty;
+  } | null;
 
+  // Guard against direct navigation / refresh where router state is null.
+  const difficulty: AIDifficulty = routeState?.difficulty ?? 'hard';
   // Default to red if not provided
-  const playerColor = routePlayerColor || 'red';
+  const playerColor = routeState?.playerColor || 'red';
 
   const {
     board,

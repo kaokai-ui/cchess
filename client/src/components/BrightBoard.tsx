@@ -30,10 +30,8 @@ const BrightBoard: React.FC<BrightBoardProps> = ({
   const colCount = board[0]?.length ?? 0;
   const shouldRotate = viewpoint === 'black';
 
-  const toDisplayPosition = (pos: Position) =>
-    shouldRotate ? rotatePosition(pos, rowCount, colCount) : pos;
-
-  const toBoardPosition = (pos: Position) =>
+  // Rotation is its own inverse, so board<->display conversions share one transform.
+  const transformPosition = (pos: Position) =>
     shouldRotate ? rotatePosition(pos, rowCount, colCount) : pos;
 
   const displayBoard = shouldRotate
@@ -43,12 +41,12 @@ const BrightBoard: React.FC<BrightBoardProps> = ({
         .map((row) => row.slice().reverse())
     : board;
 
-  const displaySelectedCell = selectedCell ? toDisplayPosition(selectedCell) : null;
-  const displayValidMoves = validMoves.map(toDisplayPosition);
+  const displaySelectedCell = selectedCell ? transformPosition(selectedCell) : null;
+  const displayValidMoves = validMoves.map(transformPosition);
   const displayLastMove = lastMove
     ? {
-        from: toDisplayPosition(lastMove.from),
-        to: toDisplayPosition(lastMove.to),
+        from: transformPosition(lastMove.from),
+        to: transformPosition(lastMove.to),
       }
     : null;
 
@@ -62,8 +60,6 @@ const BrightBoard: React.FC<BrightBoardProps> = ({
 
   const isLastMoveTarget = (row: number, col: number) =>
     displayLastMove !== null &&
-    displayLastMove !== undefined &&
-    displayLastMove.to !== undefined &&
     displayLastMove.to.row === row &&
     displayLastMove.to.col === col;
 
@@ -123,7 +119,7 @@ const BrightBoard: React.FC<BrightBoardProps> = ({
                   isSelected={isSelected(rowIdx, colIdx)}
                   isValidMove={isValidMove(rowIdx, colIdx)}
                   isLastMove={isLastMoveTarget(rowIdx, colIdx)}
-                  onClick={() => onCellClick(toBoardPosition({ row: rowIdx, col: colIdx }))}
+                  onClick={() => onCellClick(transformPosition({ row: rowIdx, col: colIdx }))}
                 />
               </div>
             ))

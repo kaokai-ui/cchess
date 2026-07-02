@@ -4,6 +4,7 @@ import type {
   PieceColor,
   Position,
 } from '../types';
+import { oppositeColor } from '../types';
 import {
   canCapture,
   getValidMoves,
@@ -13,6 +14,7 @@ import {
   countUnrevealed,
   checkWinner,
 } from './engine';
+import type { DarkChessSettings } from '../../stores/settingsStore';
 
 const ROWS = 4;
 const COLS = 8;
@@ -58,10 +60,6 @@ interface RevealedPieceState {
   pos: Position;
 }
 
-function otherColor(color: PieceColor): PieceColor {
-  return color === 'red' ? 'black' : 'red';
-}
-
 function getAdjacentPositions(pos: Position): Position[] {
   const deltas = [
     [-1, 0],
@@ -83,6 +81,7 @@ function getAdjacentPositions(pos: Position): Position[] {
 function getRevealedMoveCandidates(
   board: Board,
   color: PieceColor,
+  settings: DarkChessSettings,
 ): MoveCandidate[] {
   const results: MoveCandidate[] = [];
 
@@ -94,7 +93,7 @@ function getRevealedMoveCandidates(
       }
 
       const from = { row, col };
-      const moves = getValidMoves(board, from, color);
+      const moves = getValidMoves(board, from, color, settings);
       for (const to of moves) {
         results.push({
           move: {
@@ -134,17 +133,55 @@ function getRevealedPieces(
   return results;
 }
 
-function hasAnyCaptureMove(board: Board, color: PieceColor): boolean {
-  return getRevealedMoveCandidates(board, color)
+function hasAnyCaptureMove(
+  board: Board,
+  color: PieceColor,
+  settings: DarkChessSettings,
+): boolean {
+  return getRevealedMoveCandidates(board, color, settings)
     .some((candidate) => candidate.capturedPiece !== null);
 }
 
-function hasUncapturableOpponentPiece(board: Board, aiColor: PieceColor): boolean {
+// `canCapture` reports any cannon as able to capture anything (its legality is
+// governed by the jump rule, not rank). For the "absolute dead position" check
+// that is too optimistic: a jump-rule cannon with no possible screen piece can
+// never actually capture. This models capture *capability* more faithfully.
+function canPieceEverCapture(
+  attacker: Piece,
+  target: Piece,
+  totalRevealedPieces: number,
+  settings: DarkChessSettings,
+): boolean {
+  if (attacker.color === target.color) {
+    return false;
+  }
+
+  if (attacker.type === 'cannon') {
+    // Direct rule: the cannon captures like an adjacent attacker regardless of rank.
+    if (settings.cannonCaptureRule === 'direct') {
+      return true;
+    }
+    // Jump rule: a screen piece is required, so a capture is only ever possible
+    // when at least one other piece can act as a mount (3+ pieces on the board).
+    return totalRevealedPieces >= 3;
+  }
+
+  return canCapture(attacker, target, settings);
+}
+
+function hasUncapturableOpponentPiece(
+  board: Board,
+  aiColor: PieceColor,
+  settings: DarkChessSettings,
+): boolean {
   const aiPieces = getRevealedPieces(board, aiColor);
-  const opponentPieces = getRevealedPieces(board, otherColor(aiColor));
+  const opponentPieces = getRevealedPieces(board, oppositeColor(aiColor));
+  const totalRevealedPieces = aiPieces.length + opponentPieces.length;
 
   return opponentPieces.some(({ piece: targetPiece }) => (
-    aiPieces.every(({ piece: attackerPiece }) => !canCapture(attackerPiece, targetPiece))
+    aiPieces.every(({ piece: attackerPiece }) => (
+      !canPieceEverCapture(attackerPiece, targetPiece, totalRevealedPieces, settings)
+    ))
   ));
 }
 
@@ -153,14 +190,18 @@ function getMaterialValue(board: Board, color: PieceColor): number {
     .reduce((total, { piece }) => total + PIECE_VALUES[piece.type], 0);
 }
 
-function countMobility(board: Board, color: PieceColor): number {
+function countMobility(
+  board: Board,
+  color: PieceColor,
+  settings: DarkChessSettings,
+): number {
   let mobility = 0;
 
   for (let row = 0; row < ROWS; row += 1) {
     for (let col = 0; col < COLS; col += 1) {
       const cell = board[row][col];
       if (cell && cell.revealed && cell.color === color) {
-        mobility += getValidMoves(board, { row, col }, color).length;
+        mobility += getValidMoves(board, { row, col }, color, settings).length;
       }
     }
   }
@@ -172,8 +213,9 @@ function canBeCaptured(
   board: Board,
   target: Position,
   defenderColor: PieceColor,
+  settings: DarkChessSettings,
 ): boolean {
-  const attackerColor = otherColor(defenderColor);
+  const attackerColor = oppositeColor(defenderColor);
 
   for (let row = 0; row < ROWS; row += 1) {
     for (let col = 0; col < COLS; col += 1) {
@@ -182,7 +224,7 @@ function canBeCaptured(
         continue;
       }
 
-      const moves = getValidMoves(board, { row, col }, attackerColor);
+      const moves = getValidMoves(board, { row, col }, attackerColor, settings);
       if (moves.some((move) => move.row === target.row && move.col === target.col)) {
         return true;
       }
@@ -192,8 +234,12 @@ function canBeCaptured(
   return false;
 }
 
-function evaluateBoard(board: Board, aiColor: PieceColor): number {
-  const opponentColor = otherColor(aiColor);
+function evaluateBoard(
+  board: Board,
+  aiColor: PieceColor,
+  settings: DarkChessSettings,
+): number {
+  const opponentColor = oppositeColor(aiColor);
   let score = 0;
 
   for (let row = 0; row < ROWS; row += 1) {
@@ -216,15 +262,20 @@ function evaluateBoard(board: Board, aiColor: PieceColor): number {
   const oppCount = countPieces(board, opponentColor);
   score += (aiCount - oppCount) * 8;
 
-  const aiMobility = countMobility(board, aiColor);
-  const oppMobility = countMobility(board, opponentColor);
+  const aiMobility = countMobility(board, aiColor, settings);
+  const oppMobility = countMobility(board, opponentColor, settings);
   score += (aiMobility - oppMobility) * 3;
 
   return score;
 }
 
-function scoreFlip(board: Board, pos: Position, aiColor: PieceColor): number {
-  const baseScore = evaluateBoard(board, aiColor) - 6;
+function scoreFlip(
+  board: Board,
+  pos: Position,
+  aiColor: PieceColor,
+  settings: DarkChessSettings,
+): number {
+  const baseScore = evaluateBoard(board, aiColor, settings) - 6;
   let support = 0;
   let pressure = 0;
   let openSpace = 0;
@@ -254,6 +305,7 @@ function scoreMoveHeuristics(
   board: Board,
   candidate: MoveCandidate,
   aiColor: PieceColor,
+  settings: DarkChessSettings,
 ): number {
   const { move, newBoard, movedPiece, capturedPiece } = candidate;
   const target = move.to!;
@@ -268,7 +320,7 @@ function scoreMoveHeuristics(
     score -= 6;
   }
 
-  const destinationThreatened = canBeCaptured(newBoard, target, aiColor);
+  const destinationThreatened = canBeCaptured(newBoard, target, aiColor, settings);
   if (destinationThreatened) {
     score -= PIECE_VALUES[movedPiece.type] * 2;
     if (capturedPiece) {
@@ -278,12 +330,12 @@ function scoreMoveHeuristics(
     score += 12;
   }
 
-  const sourceThreatened = canBeCaptured(board, move.from!, aiColor);
+  const sourceThreatened = canBeCaptured(board, move.from!, aiColor, settings);
   if (sourceThreatened && !destinationThreatened) {
     score += 10;
   }
 
-  score += getValidMoves(newBoard, target, aiColor).length * 1.5;
+  score += getValidMoves(newBoard, target, aiColor, settings).length * 1.5;
 
   return score;
 }
@@ -292,10 +344,11 @@ function evaluateContinuationScore(
   board: Board,
   candidate: MoveCandidate,
   aiColor: PieceColor,
+  settings: DarkChessSettings,
 ): number {
   return (
-    minimax(candidate.newBoard, 1, false, aiColor, -Infinity, Infinity) +
-    scoreMoveHeuristics(board, candidate, aiColor) * 0.5
+    minimax(candidate.newBoard, 1, false, aiColor, -Infinity, Infinity, settings) +
+    scoreMoveHeuristics(board, candidate, aiColor, settings) * 0.5
   );
 }
 
@@ -306,6 +359,7 @@ function minimax(
   aiColor: PieceColor,
   alpha: number,
   beta: number,
+  settings: DarkChessSettings,
 ): number {
   const winner = checkWinner(board);
   if (winner === aiColor) {
@@ -317,24 +371,24 @@ function minimax(
   }
 
   if (depth === 0) {
-    return evaluateBoard(board, aiColor);
+    return evaluateBoard(board, aiColor, settings);
   }
 
-  const currentColor = isMaximizing ? aiColor : otherColor(aiColor);
-  const possibleMoves = getRevealedMoveCandidates(board, currentColor);
+  const currentColor = isMaximizing ? aiColor : oppositeColor(aiColor);
+  const possibleMoves = getRevealedMoveCandidates(board, currentColor, settings);
 
   // Dark chess can continue by flipping even when no revealed moves exist,
   // so this is not a losing terminal state.
   if (possibleMoves.length === 0) {
-    return evaluateBoard(board, aiColor);
+    return evaluateBoard(board, aiColor, settings);
   }
 
   if (isMaximizing) {
     let maxEval = -Infinity;
     for (const candidate of possibleMoves) {
       const evalScore =
-        minimax(candidate.newBoard, depth - 1, false, aiColor, alpha, beta) +
-        scoreMoveHeuristics(board, candidate, currentColor) * 0.35;
+        minimax(candidate.newBoard, depth - 1, false, aiColor, alpha, beta, settings) +
+        scoreMoveHeuristics(board, candidate, currentColor, settings) * 0.35;
       maxEval = Math.max(maxEval, evalScore);
       alpha = Math.max(alpha, evalScore);
       if (beta <= alpha) {
@@ -347,8 +401,8 @@ function minimax(
   let minEval = Infinity;
   for (const candidate of possibleMoves) {
     const evalScore =
-      minimax(candidate.newBoard, depth - 1, true, aiColor, alpha, beta) -
-      scoreMoveHeuristics(board, candidate, currentColor) * 0.35;
+      minimax(candidate.newBoard, depth - 1, true, aiColor, alpha, beta, settings) -
+      scoreMoveHeuristics(board, candidate, currentColor, settings) * 0.35;
     minEval = Math.min(minEval, evalScore);
     beta = Math.min(beta, evalScore);
     if (beta <= alpha) {
@@ -358,12 +412,16 @@ function minimax(
   return minEval;
 }
 
-export function shouldAISurrender(board: Board, aiColor: PieceColor): boolean {
+export function shouldAISurrender(
+  board: Board,
+  aiColor: PieceColor,
+  settings: DarkChessSettings,
+): boolean {
   if (countUnrevealed(board) > 0) {
     return false;
   }
 
-  const opponentColor = otherColor(aiColor);
+  const opponentColor = oppositeColor(aiColor);
   const aiPieceCount = countPieces(board, aiColor);
   const opponentPieceCount = countPieces(board, opponentColor);
 
@@ -372,13 +430,13 @@ export function shouldAISurrender(board: Board, aiColor: PieceColor): boolean {
   }
 
   const materialGap = getMaterialValue(board, opponentColor) - getMaterialValue(board, aiColor);
-  const moveCandidates = getRevealedMoveCandidates(board, aiColor);
+  const moveCandidates = getRevealedMoveCandidates(board, aiColor, settings);
   const captureCandidates = moveCandidates
     .filter((candidate) => candidate.capturedPiece !== null);
 
   // Absolute dead position: the AI cannot ever capture at least one remaining
   // enemy piece with any of its surviving piece types.
-  if (hasUncapturableOpponentPiece(board, aiColor)) {
+  if (hasUncapturableOpponentPiece(board, aiColor, settings)) {
     return true;
   }
 
@@ -387,11 +445,11 @@ export function shouldAISurrender(board: Board, aiColor: PieceColor): boolean {
   }
 
   const bestContinuation = Math.max(
-    ...moveCandidates.map((candidate) => evaluateContinuationScore(board, candidate, aiColor)),
+    ...moveCandidates.map((candidate) => evaluateContinuationScore(board, candidate, aiColor, settings)),
   );
   const bestCaptureContinuation = captureCandidates.length > 0
     ? Math.max(
-      ...captureCandidates.map((candidate) => evaluateContinuationScore(board, candidate, aiColor)),
+      ...captureCandidates.map((candidate) => evaluateContinuationScore(board, candidate, aiColor, settings)),
     )
     : -Infinity;
   const bestCaptureValue = captureCandidates.length > 0
@@ -402,7 +460,7 @@ export function shouldAISurrender(board: Board, aiColor: PieceColor): boolean {
     )
     : 0;
 
-  const opponentHasCapturePressure = hasAnyCaptureMove(board, opponentColor);
+  const opponentHasCapturePressure = hasAnyCaptureMove(board, opponentColor, settings);
   const canOnlyNibbleSmallPiece = captureCandidates.length > 0 && bestCaptureValue <= PIECE_VALUES.soldier;
   const hopelessEvenAfterBestCapture = (
     captureCandidates.length > 0 &&
@@ -427,8 +485,9 @@ export function getAIMove(
   board: Board,
   aiColor: PieceColor,
   difficulty: 'easy' | 'normal' | 'hard' | 'master',
+  settings: DarkChessSettings,
 ): AIMove | null {
-  const moveCandidates = getRevealedMoveCandidates(board, aiColor);
+  const moveCandidates = getRevealedMoveCandidates(board, aiColor, settings);
   const flipPositions = getValidFlips(board);
 
   if (moveCandidates.length === 0 && flipPositions.length === 0) {
@@ -454,8 +513,8 @@ export function getAIMove(
 
   for (const candidate of moveCandidates) {
     const score =
-      minimax(candidate.newBoard, depth - 1, false, aiColor, -Infinity, Infinity) +
-      scoreMoveHeuristics(board, candidate, aiColor);
+      minimax(candidate.newBoard, depth - 1, false, aiColor, -Infinity, Infinity, settings) +
+      scoreMoveHeuristics(board, candidate, aiColor, settings);
     const priority = candidate.capturedPiece
       ? ROOT_PRIORITY.capture
       : ROOT_PRIORITY.move;
@@ -474,7 +533,7 @@ export function getAIMove(
   }
 
   for (const pos of flipPositions) {
-    const score = scoreFlip(board, pos, aiColor);
+    const score = scoreFlip(board, pos, aiColor, settings);
     const priority = ROOT_PRIORITY.flip;
 
     if (

@@ -90,8 +90,6 @@ const DarkBoard: React.FC<DarkBoardProps> = ({
 
   const isLastMoveTarget = (row: number, col: number) =>
     lastMove !== null &&
-    lastMove !== undefined &&
-    lastMove.to !== undefined &&
     lastMove.to.row === row &&
     lastMove.to.col === col;
 
@@ -100,8 +98,8 @@ const DarkBoard: React.FC<DarkBoardProps> = ({
     flipCue.row === row &&
     flipCue.col === col;
 
-  const capturedBlackPieces = getCapturedPieces(board, 'black');
-  const capturedRedPieces = getCapturedPieces(board, 'red');
+  const capturedBlackPieces = React.useMemo(() => getCapturedPieces(board, 'black'), [board]);
+  const capturedRedPieces = React.useMemo(() => getCapturedPieces(board, 'red'), [board]);
 
   return (
     <div className="mx-auto flex w-full max-w-6xl items-stretch justify-center gap-2 p-1 sm:gap-3 sm:p-2">

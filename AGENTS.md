@@ -1,8 +1,5 @@
 # AGENTS.md — CChess
 
-## Project Status
-
-Greenfield project. No code yet. Planning docs only.
 
 ## Tech Stack
 
@@ -42,6 +39,7 @@ android/      # Capacitor Android project
 - Solo AI default difficulty: `hard` for both Bright chess and Dark chess
 - Dark chess solo AI may resign in late endgames when no unrevealed pieces remain and it has no realistic winning line
 - Dark chess solo settings default the AI flip pace to `elder` for clearer accessibility pacing
+- Dark chess now shows captured-piece trays on the left and right sides of the board in both solo and multiplayer modes
 - Dark chess has configurable rules (e.g., rook capture range, cannon capture rule)
 
 ## Commands (once initialized)
@@ -76,3 +74,9 @@ npx cap open android
 
 - `local-admin/DEVELOPMENT_PLAN.md` — full spec, phases, UI details
 - `local-admin/DEVELOPMENT_NOTES.md` — Firebase and connectivity decisions
+
+## Codex Intake
+
+- Read `MULTIPLAYER_ARCHITECTURE.md` before multiplayer work.
+- Read `D:\Game\firebase-project-architecture.md` before copying Firebase patterns from another project.
+- For UI/mobile/TV layout work, follow `D:\Game\ui-mobile-verification-checklist.md`.

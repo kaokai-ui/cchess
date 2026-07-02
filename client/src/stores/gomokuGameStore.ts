@@ -14,6 +14,7 @@ import type {
   GomokuStone,
 } from '../shared/gomoku/types';
 import { playLoseSound, playMoveSound, playWinSound } from '../utils/sound';
+import { createAiTurnScheduler } from './aiTurnScheduler';
 
 interface MoveRecord {
   board: GomokuBoard;
@@ -49,6 +50,8 @@ interface GomokuGameStore {
 
 const AI_TURN_DELAY_MS = 420;
 
+const { schedule: scheduleGomokuTimer, clear: clearGomokuTimers } = createAiTurnScheduler();
+
 function getNextStone(stone: GomokuStone): GomokuStone {
   return stone === 'black' ? 'white' : 'black';
 }
@@ -65,6 +68,8 @@ export const useGomokuGameStore = create<GomokuGameStore>((set, get) => {
   const startRound = (difficulty: GomokuAIDifficulty, starterStone: GomokuStone) => {
     const playerStone: GomokuStone = 'black';
     const aiStone: GomokuStone = 'white';
+
+    clearGomokuTimers();
 
     set({
       board: createInitialBoard(),
@@ -83,7 +88,7 @@ export const useGomokuGameStore = create<GomokuGameStore>((set, get) => {
     });
 
     if (starterStone === aiStone) {
-      setTimeout(() => {
+      scheduleGomokuTimer(() => {
         get().executeAiTurn();
       }, AI_TURN_DELAY_MS);
     }
@@ -176,7 +181,7 @@ export const useGomokuGameStore = create<GomokuGameStore>((set, get) => {
     });
 
     if (nextPlayer === aiStone) {
-      setTimeout(() => {
+      scheduleGomokuTimer(() => {
         get().executeAiTurn();
       }, AI_TURN_DELAY_MS);
     }
@@ -228,7 +233,7 @@ export const useGomokuGameStore = create<GomokuGameStore>((set, get) => {
           aiDifficulty === 'master' ? 'AI（棋聖）正在推演最佳落點…' : 'AI 正在思考…',
       });
 
-      setTimeout(() => {
+      scheduleGomokuTimer(() => {
         const state = get();
 
         if (state.phase !== 'playing' || state.currentPlayer !== state.aiStone) {
@@ -257,6 +262,7 @@ export const useGomokuGameStore = create<GomokuGameStore>((set, get) => {
     },
 
     leaveGame: () => {
+      clearGomokuTimers();
       set({
         board: createInitialBoard(),
         currentPlayer: 'black',
@@ -281,7 +287,16 @@ export const useGomokuGameStore = create<GomokuGameStore>((set, get) => {
         return;
       }
 
-      const previousState = history[historyIndex];
+      clearGomokuTimers();
+
+      // A single ply may land on the AI's turn (the AI would just replay). Step
+      // back an extra ply so the player's own move is actually taken back.
+      let targetIndex = historyIndex;
+      if (history[targetIndex].currentPlayer === aiStone && targetIndex > 0) {
+        targetIndex -= 1;
+      }
+
+      const previousState = history[targetIndex];
 
       set({
         board: previousState.board,
@@ -292,11 +307,12 @@ export const useGomokuGameStore = create<GomokuGameStore>((set, get) => {
         isAiThinking: false,
         lastMove: previousState.lastMove,
         message: previousState.message,
-        historyIndex: historyIndex - 1,
+        historyIndex: targetIndex - 1,
       });
 
+      // Only reschedule the AI if we genuinely landed on its turn (AI-first round).
       if (previousState.currentPlayer === aiStone) {
-        setTimeout(() => {
+        scheduleGomokuTimer(() => {
           get().executeAiTurn();
         }, AI_TURN_DELAY_MS);
       }

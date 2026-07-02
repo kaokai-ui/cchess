@@ -6,7 +6,6 @@ import {
   getPlayerColor,
   getRoomPlayerCount,
   isPlayerTurn,
-  leaveOnlineRoom,
   reconnectOnlineRoom,
   restartOnlineRoom,
   submitDarkFlip,
@@ -14,6 +13,7 @@ import {
   submitDarkSurrender,
   subscribeToOnlineRoom,
 } from '../online/service';
+import { leaveOnlineRoomThenNavigateHome } from '../online/leaveNavigation';
 import { useSettingsStore } from '../stores/settingsStore';
 import type { DarkOnlineRoom, PresenceSnapshot } from '../online/types';
 import { isDarkOnlineRoom } from '../online/types';
@@ -111,6 +111,7 @@ const OnlineDarkGame: React.FC = () => {
   const [flipCue, setFlipCue] = useState<Position | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(true);
+  const [leaving, setLeaving] = useState(false);
   const [restarting, setRestarting] = useState(false);
   const [surrendering, setSurrendering] = useState(false);
   const previousRoomRef = useRef<DarkOnlineRoom | null>(null);
@@ -156,12 +157,6 @@ const OnlineDarkGame: React.FC = () => {
       unsubscribe();
     };
   }, [roomId]);
-
-  useEffect(() => {
-    if (!flipRevealCueEnabled) {
-      setFlipCue(null);
-    }
-  }, [flipRevealCueEnabled]);
 
   useEffect(() => {
     const remoteFlip = findRemoteFlipPosition(previousRoomRef.current, room, myUid);
@@ -230,10 +225,13 @@ const OnlineDarkGame: React.FC = () => {
   );
 
   const handleLeave = async () => {
-    if (room) {
-      await leaveOnlineRoom(room.roomId);
+    if (leaving) {
+      return;
     }
-    navigate('/');
+
+    setLeaving(true);
+    setError('');
+    await leaveOnlineRoomThenNavigateHome(room?.roomId, navigate);
   };
 
   const handleCellClick = async (pos: Position) => {
@@ -357,8 +355,9 @@ const OnlineDarkGame: React.FC = () => {
             <button
               className="w-full px-3 py-3 bg-gray-700 text-white rounded-xl text-sm font-bold sm:text-base"
               onClick={() => void handleLeave()}
+              disabled={leaving}
             >
-              離開房間
+              {leaving ? '離開中...' : '離開房間'}
             </button>
             <button
               className="w-full px-3 py-3 bg-amber-600 text-white rounded-xl text-sm font-bold disabled:opacity-60 sm:text-base"
@@ -488,8 +487,9 @@ const OnlineDarkGame: React.FC = () => {
               <button
                 className="w-full py-3 bg-gray-700 text-white text-lg font-bold rounded-2xl"
                 onClick={() => void handleLeave()}
+                disabled={leaving}
               >
-                離開遊戲
+                {leaving ? '離開中...' : '離開遊戲'}
               </button>
             </div>
           </div>

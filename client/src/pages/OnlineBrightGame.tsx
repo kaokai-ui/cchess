@@ -6,12 +6,12 @@ import {
   getPlayerColor,
   getRoomPlayerCount,
   isPlayerTurn,
-  leaveOnlineRoom,
   reconnectOnlineRoom,
   restartOnlineRoom,
   submitBrightMove,
   subscribeToOnlineRoom,
 } from '../online/service';
+import { leaveOnlineRoomThenNavigateHome } from '../online/leaveNavigation';
 import type { BrightOnlineRoom, PresenceSnapshot } from '../online/types';
 import { isBrightOnlineRoom } from '../online/types';
 import type { Position } from '../shared/types';
@@ -48,6 +48,7 @@ const OnlineBrightGame: React.FC = () => {
   const [selectedCell, setSelectedCell] = useState<Position | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(true);
+  const [leaving, setLeaving] = useState(false);
   const [restarting, setRestarting] = useState(false);
 
   useEffect(() => {
@@ -117,10 +118,13 @@ const OnlineBrightGame: React.FC = () => {
   const turnLabel = room ? `${room.currentPlayer === 'red' ? '紅方' : '黑方'}的回合` : '';
 
   const handleLeave = async () => {
-    if (room) {
-      await leaveOnlineRoom(room.roomId);
+    if (leaving) {
+      return;
     }
-    navigate('/');
+
+    setLeaving(true);
+    setError('');
+    await leaveOnlineRoomThenNavigateHome(room?.roomId, navigate);
   };
 
   const handleCellClick = async (pos: Position) => {
@@ -205,8 +209,9 @@ const OnlineBrightGame: React.FC = () => {
             <button
               className="w-full px-4 py-3 bg-gray-700 text-white rounded-xl text-base font-bold"
               onClick={() => void handleLeave()}
+              disabled={leaving}
             >
-              離開房間
+              {leaving ? '離開中...' : '離開房間'}
             </button>
 
             <div className="px-3 py-2.5 bg-white rounded-xl shadow-sm">
@@ -316,8 +321,9 @@ const OnlineBrightGame: React.FC = () => {
               <button
                 className="w-full py-3 bg-gray-700 text-white text-lg font-bold rounded-2xl"
                 onClick={() => void handleLeave()}
+                disabled={leaving}
               >
-                返回主選單
+                {leaving ? '離開中...' : '返回主選單'}
               </button>
             </div>
           </div>

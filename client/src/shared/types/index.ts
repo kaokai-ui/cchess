@@ -1,6 +1,10 @@
 export type PieceType = 'general' | 'advisor' | 'elephant' | 'horse' | 'chariot' | 'cannon' | 'soldier';
 export type PieceColor = 'red' | 'black';
 
+export function oppositeColor(color: PieceColor): PieceColor {
+  return color === 'red' ? 'black' : 'red';
+}
+
 export interface Piece {
   type: PieceType;
   color: PieceColor;

@@ -4,12 +4,12 @@ import GomokuBoard from '../components/GomokuBoard';
 import {
   getPlayerColor,
   isPlayerTurn,
-  leaveOnlineRoom,
   reconnectOnlineRoom,
   restartOnlineRoom,
   submitGomokuMove,
   subscribeToOnlineRoom,
 } from '../online/service';
+import { leaveOnlineRoomThenNavigateHome } from '../online/leaveNavigation';
 import type { GomokuOnlineRoom, PresenceSnapshot } from '../online/types';
 import { isGomokuOnlineRoom } from '../online/types';
 import type { GomokuStone } from '../shared/gomoku/types';
@@ -58,6 +58,7 @@ const OnlineGomokuGame: React.FC = () => {
   const [myUid, setMyUid] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(true);
+  const [leaving, setLeaving] = useState(false);
   const [restarting, setRestarting] = useState(false);
 
   useEffect(() => {
@@ -129,11 +130,13 @@ const OnlineGomokuGame: React.FC = () => {
   }, [canPlay, myUid, room, waitingForGuest]);
 
   const handleLeave = async () => {
-    if (room) {
-      await leaveOnlineRoom(room.roomId);
+    if (leaving) {
+      return;
     }
 
-    navigate('/');
+    setLeaving(true);
+    setError('');
+    await leaveOnlineRoomThenNavigateHome(room?.roomId, navigate);
   };
 
   const handleCellClick = async (pos: Position) => {
@@ -201,8 +204,9 @@ const OnlineGomokuGame: React.FC = () => {
             <button
               className="rounded-xl bg-stone-700 px-4 py-2 text-base font-bold text-white transition-colors hover:bg-stone-800 sm:text-lg"
               onClick={() => void handleLeave()}
+              disabled={leaving}
             >
-              返回
+              {leaving ? '離開中...' : '返回'}
             </button>
 
             <div className="flex gap-2">
@@ -297,8 +301,9 @@ const OnlineGomokuGame: React.FC = () => {
               <button
                 className="w-full rounded-2xl bg-stone-700 py-3 text-xl font-black text-white transition-transform hover:scale-[1.02] hover:bg-stone-800"
                 onClick={() => void handleLeave()}
+                disabled={leaving}
               >
-                返回選單
+                {leaving ? '離開中...' : '返回選單'}
               </button>
             </div>
           </div>

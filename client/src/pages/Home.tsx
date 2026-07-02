@@ -191,6 +191,7 @@ const Home: React.FC = () => {
               <button
                 className="rounded-2xl bg-emerald-600 px-5 py-4 text-2xl font-black text-white shadow-lg transition-all hover:scale-[1.02] hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-stone-400 disabled:hover:scale-100"
                 onClick={handleStart}
+                disabled={playMode === 'online' && !multiplayerReady}
               >
                 {startLabel}
               </button>

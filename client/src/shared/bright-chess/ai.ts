@@ -3,6 +3,7 @@ import type {
   PieceColor,
   Position,
 } from '../types';
+import { oppositeColor } from '../types';
 import {
   getValidMoves,
   movePiece,
@@ -23,10 +24,14 @@ const PIECE_VALUES: Record<string, number> = {
   chariot: 900,
   cannon: 450,
   horse: 400,
-  elephant: 20,
-  advisor: 20,
-  soldier: 10,
+  elephant: 200,
+  advisor: 200,
+  soldier: 100,
 };
+
+// Score returned when a side's general is captured, at search depth 0. minimax
+// adds the remaining depth so faster mates outrank slower ones.
+const TERMINAL_WIN_SCORE = 100000;
 
 const SOLDIER_PST: number[][] = [
   [0,  0,  0,  0,  0,  0,  0,  0,  0],
@@ -151,7 +156,7 @@ function countMobility(board: Board, color: PieceColor): number {
 
 function evaluateBoard(board: Board, aiColor: PieceColor): number {
   let score = 0;
-  const opponent: PieceColor = aiColor === 'red' ? 'black' : 'red';
+  const opponent = oppositeColor(aiColor);
 
   for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col < COLS; col++) {
@@ -228,14 +233,19 @@ function quiescenceSearch(
   beta: number,
   aiColor: PieceColor,
   isMaximizing: boolean,
-  timeoutAt: number,
   nodeCount: { count: number },
   maxNodes: number
 ): number {
   nodeCount.count++;
-  if (nodeCount.count > maxNodes || Date.now() > timeoutAt) {
+  if (nodeCount.count > maxNodes) {
     return evaluateBoard(board, aiColor);
   }
+
+  // A captured general is terminal even inside the capture-only search, so
+  // score it as a mate rather than as raw material (see B11).
+  const winner = checkWinner(board);
+  if (winner === aiColor) return TERMINAL_WIN_SCORE;
+  if (winner && winner !== aiColor) return -TERMINAL_WIN_SCORE;
 
   const standPat = evaluateBoard(board, aiColor);
 
@@ -247,7 +257,7 @@ function quiescenceSearch(
     if (standPat < beta) beta = standPat;
   }
 
-  const currentColor: PieceColor = isMaximizing ? aiColor : (aiColor === 'red' ? 'black' : 'red');
+  const currentColor: PieceColor = isMaximizing ? aiColor : oppositeColor(aiColor);
   const captureMoves = getCaptureMoves(board, currentColor);
 
   captureMoves.sort((a, b) => {
@@ -260,20 +270,16 @@ function quiescenceSearch(
 
   if (isMaximizing) {
     for (const { newBoard } of captureMoves) {
-    if (Date.now() > timeoutAt || nodeCount.count > maxNodes) break;
-
-    const score = quiescenceSearch(newBoard, alpha, beta, aiColor, false, timeoutAt, nodeCount, maxNodes);
-
-    if (score >= beta) return beta;
-    if (score > alpha) alpha = score;
-  }
-
-  return alpha;
-} else {
+      if (nodeCount.count > maxNodes) break;
+      const score = quiescenceSearch(newBoard, alpha, beta, aiColor, false, nodeCount, maxNodes);
+      if (score >= beta) return beta;
+      if (score > alpha) alpha = score;
+    }
+    return alpha;
+  } else {
     for (const { newBoard } of captureMoves) {
-    if (Date.now() > timeoutAt || nodeCount.count > maxNodes) break;
-
-    const score = quiescenceSearch(newBoard, alpha, beta, aiColor, true, timeoutAt, nodeCount, maxNodes);
+      if (nodeCount.count > maxNodes) break;
+      const score = quiescenceSearch(newBoard, alpha, beta, aiColor, true, nodeCount, maxNodes);
       if (score <= alpha) return alpha;
       if (score < beta) beta = score;
     }
@@ -288,28 +294,29 @@ function minimax(
   aiColor: PieceColor,
   alpha: number,
   beta: number,
-  timeoutAt: number,
   nodeCount: { count: number },
   maxNodes: number
 ): number {
   nodeCount.count++;
-  if (nodeCount.count > maxNodes || Date.now() > timeoutAt) {
+  if (nodeCount.count > maxNodes) {
     return evaluateBoard(board, aiColor);
   }
 
   const winner = checkWinner(board);
-  if (winner === aiColor) return 100000 + depth;
-  if (winner && winner !== aiColor) return -100000 - depth;
+  if (winner === aiColor) return TERMINAL_WIN_SCORE + depth;
+  if (winner && winner !== aiColor) return -TERMINAL_WIN_SCORE - depth;
 
   if (depth === 0) {
-    return quiescenceSearch(board, alpha, beta, aiColor, isMaximizing, timeoutAt, nodeCount, maxNodes);
+    return quiescenceSearch(board, alpha, beta, aiColor, isMaximizing, nodeCount, maxNodes);
   }
 
-  const currentColor: PieceColor = isMaximizing ? aiColor : (aiColor === 'red' ? 'black' : 'red');
+  const currentColor: PieceColor = isMaximizing ? aiColor : oppositeColor(aiColor);
   const possibleMoves = getAllPossibleMoves(board, currentColor);
 
   if (possibleMoves.length === 0) {
-    return isMaximizing ? -100000 : 100000;
+    // The side to move has no legal moves and loses. Use the same magnitude and
+    // depth-based mate distance as checkWinner so terminals rank consistently (B11).
+    return isMaximizing ? -(TERMINAL_WIN_SCORE + depth) : TERMINAL_WIN_SCORE + depth;
   }
 
   possibleMoves.sort((a, b) => {
@@ -323,8 +330,8 @@ function minimax(
   if (isMaximizing) {
     let maxEval = -Infinity;
     for (const { newBoard } of possibleMoves) {
-      const evalScore = minimax(newBoard, depth - 1, false, aiColor, alpha, beta, timeoutAt, nodeCount, maxNodes);
-      if (Date.now() > timeoutAt || nodeCount.count > maxNodes) return evalScore;
+      const evalScore = minimax(newBoard, depth - 1, false, aiColor, alpha, beta, nodeCount, maxNodes);
+      if (nodeCount.count > maxNodes) return evalScore;
       maxEval = Math.max(maxEval, evalScore);
       alpha = Math.max(alpha, evalScore);
       if (beta <= alpha) break;
@@ -333,8 +340,8 @@ function minimax(
   } else {
     let minEval = Infinity;
     for (const { newBoard } of possibleMoves) {
-      const evalScore = minimax(newBoard, depth - 1, true, aiColor, alpha, beta, timeoutAt, nodeCount, maxNodes);
-      if (Date.now() > timeoutAt || nodeCount.count > maxNodes) return evalScore;
+      const evalScore = minimax(newBoard, depth - 1, true, aiColor, alpha, beta, nodeCount, maxNodes);
+      if (nodeCount.count > maxNodes) return evalScore;
       minEval = Math.min(minEval, evalScore);
       beta = Math.min(beta, evalScore);
       if (beta <= alpha) break;
@@ -358,13 +365,12 @@ export function getAIMove(
   const depthMap = { normal: 3, hard: 3, master: 4 };
   const maxDepth = depthMap[difficulty] || 3;
 
-  const timeLimits = { normal: 10000, hard: 13000, master: 16000 };
+  // Node-count budget is the sole cutoff: it is deterministic (independent of
+  // machine speed / wall clock), so the same board always yields the same move (B13).
   const nodeLimits = { normal: 200000, hard: 250000, master: 300000 };
-  const maxTime = timeLimits[difficulty] || 10000;
   const maxNodes = nodeLimits[difficulty] || 200000;
 
   let bestMove = possibleMoves[0].move;
-  const timeoutAt = Date.now() + maxTime;
   const nodeCount = { count: 0 };
 
   const orderedMoves = possibleMoves;
@@ -375,9 +381,9 @@ export function getAIMove(
     let iterationComplete = false;
 
     for (const { move, newBoard } of orderedMoves) {
-      if (Date.now() > timeoutAt || nodeCount.count > maxNodes) break;
-      const score = minimax(newBoard, depth - 1, false, aiColor, -Infinity, Infinity, timeoutAt, nodeCount, maxNodes);
-      if (Date.now() > timeoutAt || nodeCount.count > maxNodes) break;
+      if (nodeCount.count > maxNodes) break;
+      const score = minimax(newBoard, depth - 1, false, aiColor, -Infinity, Infinity, nodeCount, maxNodes);
+      if (nodeCount.count > maxNodes) break;
       if (score > iterationBestScore) {
         iterationBestScore = score;
         iterationBestMove = move;

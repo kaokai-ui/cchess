@@ -16,6 +16,7 @@ import {
 import { getAIMove, shouldAISurrender } from '../shared/dark-chess/ai';
 import { useSettingsStore } from './settingsStore';
 import { playMoveSound, playCaptureSound, playFlipSound, playWinSound, playLoseSound } from '../utils/sound';
+import { createAiTurnScheduler } from './aiTurnScheduler';
 
 export type AIDifficulty = 'easy' | 'normal' | 'hard' | 'master';
 
@@ -72,6 +73,8 @@ const DARK_AI_FLIP_CUE_DURATION_MS = {
 
 let flipCueTimer: ReturnType<typeof setTimeout> | null = null;
 
+const { schedule: scheduleDarkTimer, clear: clearDarkTimers } = createAiTurnScheduler();
+
 function clearFlipCueTimer() {
   if (flipCueTimer) {
     clearTimeout(flipCueTimer);
@@ -101,6 +104,13 @@ function getDarkAiFlipCueDurationMs() {
   return DARK_AI_FLIP_CUE_DURATION_MS[pace];
 }
 
+// Solo play passes the player's rule settings explicitly into the engine/AI so
+// it never depends on the engine's module-level ruleset (which the online path
+// still uses via withDarkRuleSet).
+function getDarkRules() {
+  return useSettingsStore.getState().darkChess;
+}
+
 export const useGameStore = create<GameStore>((set, get) => ({
   board: emptyBoard(),
   currentPlayer: 'red',
@@ -122,6 +132,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   initGame: (difficulty: AIDifficulty) => {
     const board = createInitialBoard();
     clearFlipCueTimer();
+    clearDarkTimers();
     set({
       board,
       currentPlayer: 'red',
@@ -147,7 +158,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const cell = board[pos.row][pos.col];
 
     if (cell && cell.revealed && cell.color === currentPlayer) {
-      const moves = getValidMoves(board, pos, currentPlayer);
+      const moves = getValidMoves(board, pos, currentPlayer, getDarkRules());
       set({ selectedCell: pos, validMoves: moves });
     } else {
       set({ selectedCell: null, validMoves: [] });
@@ -168,7 +179,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     const winner = checkWinner(newBoard);
-    const stalemate = checkStalemate(newBoard, currentPlayer === 'red' ? 'black' : 'red');
+    const stalemate = checkStalemate(newBoard, currentPlayer === 'red' ? 'black' : 'red', getDarkRules());
 
     const nextPlayer: PieceColor = currentPlayer === 'red' ? 'black' : 'red';
 
@@ -225,7 +236,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     const { playerColor } = get();
     if (nextPlayer !== playerColor) {
-      setTimeout(() => get().executeAiTurn(), 500);
+      scheduleDarkTimer(() => get().executeAiTurn(), 500);
     }
   },
 
@@ -255,14 +266,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
         historyIndex: historyIndex + 1,
       });
 
-      setTimeout(() => get().executeAiTurn(), 500);
+      scheduleDarkTimer(() => get().executeAiTurn(), 500);
       return;
     }
 
     const nextPlayer: PieceColor = currentPlayer === 'red' ? 'black' : 'red';
 
     const winner = checkWinner(newBoard);
-    const stalemate = checkStalemate(newBoard, nextPlayer);
+    const stalemate = checkStalemate(newBoard, nextPlayer, getDarkRules());
 
     if (winner) {
       const { playerColor } = get();
@@ -317,7 +328,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     const { aiColor } = get();
     if (nextPlayer === aiColor) {
-      setTimeout(() => get().executeAiTurn(), 500);
+      scheduleDarkTimer(() => get().executeAiTurn(), 500);
     }
   },
 
@@ -359,12 +370,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     set({ isAiThinking: true, message: 'AI 思考中...' });
 
-    setTimeout(() => {
+    scheduleDarkTimer(() => {
       const state = get();
       if (state.phase !== 'playing') return;
       if (state.currentPlayer !== aiColor) return;
 
-      if (shouldAISurrender(state.board, aiColor)) {
+      if (shouldAISurrender(state.board, aiColor, getDarkRules())) {
         set({
           phase: 'gameOver',
           winner: state.playerColor!,
@@ -374,7 +385,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         return;
       }
 
-      const aiMove = getAIMove(state.board, aiColor, state.aiDifficulty);
+      const aiMove = getAIMove(state.board, aiColor, state.aiDifficulty, getDarkRules());
       const flipCueDurationMs = getDarkAiFlipCueDurationMs();
 
       if (!aiMove) {
@@ -389,7 +400,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
 
       if (aiMove.type === 'flip' && aiMove.pos) {
-        setTimeout(() => {
+        scheduleDarkTimer(() => {
           const flipState = get();
           if (flipState.phase !== 'playing') return;
           if (flipState.currentPlayer !== aiColor) return;
@@ -402,7 +413,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         state.executeMove(aiMove.to);
       }
 
-      setTimeout(() => {
+      scheduleDarkTimer(() => {
         const s = get();
         if (s.isAiThinking) {
           set({ isAiThinking: false });
@@ -418,6 +429,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   leaveGame: () => {
     clearFlipCueTimer();
+    clearDarkTimers();
     set({
       board: emptyBoard(),
       currentPlayer: 'red',
@@ -441,8 +453,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { history, historyIndex } = get();
     if (historyIndex < 0) return;
 
-    const prevState = history[historyIndex];
     clearFlipCueTimer();
+    clearDarkTimers();
+
+    // A single ply may land on the AI's turn (the AI would just replay). Step
+    // back an extra ply so the player's own move/flip is actually taken back.
+    let targetIndex = historyIndex;
+    const top = history[targetIndex];
+    if (
+      !top.isFlippingFirst &&
+      top.aiColor &&
+      top.currentPlayer === top.aiColor &&
+      targetIndex > 0
+    ) {
+      targetIndex -= 1;
+    }
+
+    const prevState = history[targetIndex];
     set({
       board: prevState.board,
       currentPlayer: prevState.currentPlayer,
@@ -453,15 +480,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
       validMoves: [],
       lastMove: prevState.lastMove,
       message: prevState.message,
-      historyIndex: historyIndex - 1,
+      historyIndex: targetIndex - 1,
       phase: 'playing',
       winner: null,
       isAiThinking: false,
       flipCue: null,
     });
 
-    if (!prevState.isFlippingFirst && prevState.currentPlayer === get().aiColor) {
-      setTimeout(() => get().executeAiTurn(), 500);
+    // Only reschedule the AI if we genuinely landed on its turn.
+    if (!prevState.isFlippingFirst && prevState.currentPlayer === prevState.aiColor) {
+      scheduleDarkTimer(() => get().executeAiTurn(), 500);
     }
   },
 

@@ -12,8 +12,9 @@ import {
   checkWinner,
   checkStalemate,
 } from '../shared/bright-chess/engine';
-import { getAIMove } from '../shared/bright-chess/ai';
+import { computeBrightAiMove } from '../shared/bright-chess/aiRunner';
 import { playMoveSound, playCaptureSound, playWinSound } from '../utils/sound';
+import { createAiTurnScheduler } from './aiTurnScheduler';
 
 export type AIDifficulty = 'easy' | 'normal' | 'hard' | 'master';
 
@@ -53,6 +54,23 @@ interface GameStore {
 const emptyBoard = (): Board =>
   Array.from({ length: 10 }, () => Array(9).fill(null));
 
+const AI_TURN_DELAY_MS = 500;
+const AI_ACTION_SETTLE_DELAY_MS = 800;
+
+const brightScheduler = createAiTurnScheduler();
+const scheduleBrightTimer = brightScheduler.schedule;
+
+// Bumped whenever pending AI work is cancelled (reset / leave / undo). The
+// AI runs asynchronously (off the main thread via a worker), so an in-flight
+// computation compares against this token on completion and discards a stale
+// result instead of applying a move to a game that has since moved on.
+let brightAiToken = 0;
+
+function clearBrightTimers() {
+  brightAiToken += 1;
+  brightScheduler.clear();
+}
+
 export const useBrightGameStore = create<GameStore>((set, get) => ({
   board: emptyBoard(),
   currentPlayer: 'red',
@@ -70,6 +88,7 @@ export const useBrightGameStore = create<GameStore>((set, get) => ({
 
   initGame: (playerColor: PieceColor, difficulty: AIDifficulty) => {
     const board = createInitialBoard();
+    clearBrightTimers();
     set({
       board,
       currentPlayer: 'red',
@@ -126,7 +145,7 @@ export const useBrightGameStore = create<GameStore>((set, get) => ({
         winner,
         lastMove: { from: selectedCell, to },
         message: winner === get().playerColor ? '你贏了！' : '你輸了！',
-        history: [...history.slice(0, historyIndex + 1), { board, currentPlayer, lastMove: { from: selectedCell, to }, message: `${nextPlayer === 'red' ? '紅方' : '黑方'}的回合` }],
+        history: [...history.slice(0, historyIndex + 1), { board, currentPlayer, lastMove: { from: selectedCell, to }, message: `${currentPlayer === 'red' ? '紅方' : '黑方'}的回合` }],
         historyIndex: historyIndex + 1,
       });
       return;
@@ -142,13 +161,13 @@ export const useBrightGameStore = create<GameStore>((set, get) => ({
         winner: currentPlayer,
         lastMove: { from: selectedCell, to },
         message: '對方無子可動，你贏了！',
-        history: [...history.slice(0, historyIndex + 1), { board, currentPlayer, lastMove: { from: selectedCell, to }, message: `${nextPlayer === 'red' ? '紅方' : '黑方'}的回合` }],
+        history: [...history.slice(0, historyIndex + 1), { board, currentPlayer, lastMove: { from: selectedCell, to }, message: `${currentPlayer === 'red' ? '紅方' : '黑方'}的回合` }],
         historyIndex: historyIndex + 1,
       });
       return;
     }
 
-    const newHistory = [...history.slice(0, historyIndex + 1), { board, currentPlayer, lastMove: { from: selectedCell, to }, message: `${nextPlayer === 'red' ? '紅方' : '黑方'}的回合` }];
+    const newHistory = [...history.slice(0, historyIndex + 1), { board, currentPlayer, lastMove: { from: selectedCell, to }, message: `${currentPlayer === 'red' ? '紅方' : '黑方'}的回合` }];
 
     set({
       board: newBoard,
@@ -162,14 +181,17 @@ export const useBrightGameStore = create<GameStore>((set, get) => ({
     });
 
     if (nextPlayer !== get().playerColor) {
-      setTimeout(() => get().executeAiTurn(), 500);
+      scheduleBrightTimer(() => get().executeAiTurn(), AI_TURN_DELAY_MS);
     }
   },
 
   handleCellClick: (pos: Position) => {
-    const { board, currentPlayer, selectedCell, validMoves, phase } = get();
+    const { board, currentPlayer, selectedCell, validMoves, phase, playerColor, isAiThinking } = get();
 
     if (phase !== 'playing') return;
+    // Only the human may act, and only on their own turn (blocks clicking the
+    // AI's pieces during the AI's think delay).
+    if (isAiThinking || currentPlayer !== playerColor) return;
 
     const cell = board[pos.row][pos.col];
 
@@ -199,34 +221,45 @@ export const useBrightGameStore = create<GameStore>((set, get) => ({
 
     set({ isAiThinking: true, message: 'AI 思考中...' });
 
-    setTimeout(() => {
+    scheduleBrightTimer(() => {
       const state = get();
       if (state.phase !== 'playing') return;
       if (state.currentPlayer !== aiColor) return;
 
-      const aiMove = getAIMove(state.board, aiColor, state.aiDifficulty);
+      // The search runs off the main thread; capture the token so a reset/leave/
+      // undo during computation discards this (now stale) result.
+      const token = brightAiToken;
 
-      if (!aiMove) {
-        const winner = state.playerColor!;
-        set({
-          phase: 'gameOver',
-          winner,
-          isAiThinking: false,
-          message: '你贏了！',
-        });
-        return;
-      }
+      void computeBrightAiMove(state.board, aiColor, state.aiDifficulty).then((aiMove) => {
+        if (token !== brightAiToken) return;
 
-      state.selectCell(aiMove.from);
-      state.executeMove(aiMove.to);
-
-      setTimeout(() => {
         const s = get();
-        if (s.isAiThinking) {
-          set({ isAiThinking: false });
+        if (s.phase !== 'playing' || s.currentPlayer !== aiColor) {
+          if (s.isAiThinking) set({ isAiThinking: false });
+          return;
         }
-      }, 800);
-    }, 500);
+
+        if (!aiMove) {
+          set({
+            phase: 'gameOver',
+            winner: s.playerColor,
+            isAiThinking: false,
+            message: '你贏了！',
+          });
+          return;
+        }
+
+        s.selectCell(aiMove.from);
+        s.executeMove(aiMove.to);
+
+        scheduleBrightTimer(() => {
+          const s2 = get();
+          if (s2.isAiThinking) {
+            set({ isAiThinking: false });
+          }
+        }, AI_ACTION_SETTLE_DELAY_MS);
+      });
+    }, AI_TURN_DELAY_MS);
   },
 
   resetGame: () => {
@@ -235,6 +268,7 @@ export const useBrightGameStore = create<GameStore>((set, get) => ({
   },
 
   leaveGame: () => {
+    clearBrightTimers();
     set({
       board: emptyBoard(),
       currentPlayer: 'red',
@@ -255,7 +289,17 @@ export const useBrightGameStore = create<GameStore>((set, get) => ({
     const { history, historyIndex, playerColor } = get();
     if (historyIndex < 0) return;
 
-    const prevState = history[historyIndex];
+    clearBrightTimers();
+
+    // A single ply may land on the AI's turn (the AI would just replay). When
+    // undoing against the AI, step back an extra ply so the human's own move is
+    // actually taken back and it becomes the human's turn again.
+    let targetIndex = historyIndex;
+    if (history[targetIndex].currentPlayer !== playerColor && targetIndex > 0) {
+      targetIndex -= 1;
+    }
+
+    const prevState = history[targetIndex];
     set({
       board: prevState.board,
       currentPlayer: prevState.currentPlayer,
@@ -263,14 +307,15 @@ export const useBrightGameStore = create<GameStore>((set, get) => ({
       validMoves: [],
       lastMove: prevState.lastMove,
       message: prevState.message,
-      historyIndex: historyIndex - 1,
+      historyIndex: targetIndex - 1,
       phase: 'playing',
       winner: null,
       isAiThinking: false,
     });
 
+    // Only reschedule the AI if we genuinely landed on its turn (e.g. AI-first game).
     if (prevState.currentPlayer !== playerColor) {
-      setTimeout(() => get().executeAiTurn(), 500);
+      scheduleBrightTimer(() => get().executeAiTurn(), AI_TURN_DELAY_MS);
     }
   },
 
