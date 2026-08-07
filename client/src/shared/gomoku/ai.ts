@@ -6,9 +6,165 @@ import {
   hasAnyStone,
   placeStone,
 } from './engine';
+import {
+  scaleConfig,
+  searchBestMove,
+  toPosition,
+  type GomokuSearchConfig,
+  type GomokuSearchResult,
+} from './search';
 import type { GomokuBoard, GomokuPosition, GomokuStone } from './types';
 
-export type GomokuAIDifficulty = 'easy' | 'normal' | 'hard' | 'master';
+/** Levels served by the original shape-scoring heuristic. */
+export type LegacyGomokuDifficulty = 'easy' | 'normal' | 'hard' | 'master';
+/** Levels served by the alpha-beta / threat search in `search.ts`. */
+export type AdvancedGomokuDifficulty = 'god' | 'tianyuan' | 'wuji';
+export type GomokuAIDifficulty = LegacyGomokuDifficulty | AdvancedGomokuDifficulty;
+
+// 棋神: alpha-beta with a transposition table plus a VCF solver, so it wins any
+// four-chain that exists and never walks into one.
+const GOD_CONFIG: GomokuSearchConfig = {
+  maxDepth: 8,
+  timeBudgetMs: 350,
+  nodeLimit: 600_000,
+  widths: [4, 8, 10, 12, 12, 12, 14, 14, 14],
+  vcfDepth: 8,
+  vctDepth: 0,
+  threatShare: 0.35,
+  vcfNodeLimit: 30_000,
+  vctNodeLimit: 0,
+  useOpeningBook: false,
+};
+
+// 天元: deeper window, a VCT solver on top of VCF (open-three chains, not just
+// fours), a slightly paranoid defence weight and the opening book.
+const TIANYUAN_CONFIG: GomokuSearchConfig = {
+  maxDepth: 12,
+  timeBudgetMs: 900,
+  nodeLimit: 2_000_000,
+  widths: [4, 8, 10, 12, 12, 12, 14, 14, 14, 14, 16, 16, 16],
+  vcfDepth: 12,
+  vctDepth: 8,
+  threatShare: 0.3,
+  vcfNodeLimit: 60_000,
+  vctNodeLimit: 90_000,
+  useOpeningBook: true,
+};
+
+// 無極: the whole clock, the deepest window, and — when the device has cores to
+// spare — the search and the two threat solvers running side by side instead of
+// carving up one budget (see `getParallelPlan`).
+const WUJI_CONFIG: GomokuSearchConfig = {
+  maxDepth: 16,
+  timeBudgetMs: 2_000,
+  nodeLimit: 6_000_000,
+  widths: [4, 8, 10, 12, 12, 12, 14, 14, 14, 16, 16, 16, 16, 18, 18, 18, 18],
+  vcfDepth: 16,
+  vctDepth: 12,
+  threatShare: 0.4,
+  vcfNodeLimit: 250_000,
+  vctNodeLimit: 500_000,
+  useOpeningBook: true,
+};
+
+const ADVANCED_CONFIGS: Record<AdvancedGomokuDifficulty, GomokuSearchConfig> = {
+  god: GOD_CONFIG,
+  tianyuan: TIANYUAN_CONFIG,
+  wuji: WUJI_CONFIG,
+};
+
+export function isAdvancedDifficulty(
+  difficulty: GomokuAIDifficulty,
+): difficulty is AdvancedGomokuDifficulty {
+  return difficulty === 'god' || difficulty === 'tianyuan' || difficulty === 'wuji';
+}
+
+/** Search settings for a level, already scaled down for weaker devices. */
+export function getSearchConfig(
+  difficulty: AdvancedGomokuDifficulty,
+  overrides?: Partial<GomokuSearchConfig>,
+): GomokuSearchConfig {
+  return { ...scaleConfig(ADVANCED_CONFIGS[difficulty]), ...overrides };
+}
+
+/**
+ * How to spread one move across `slots` workers. Every entry is one worker's
+ * config override; the caller runs them concurrently and combines the results
+ * with `pickParallelResult`.
+ *
+ * Only 無極 splits: with three slots the deep search keeps the entire clock
+ * while a VCF hunter and a VCT hunter work the same position in parallel, so
+ * neither side of the pipeline has to give up time to the other. With fewer
+ * slots the plan collapses back to the sequential pipeline.
+ */
+export function getParallelPlan(
+  difficulty: GomokuAIDifficulty,
+  slots: number,
+): Partial<GomokuSearchConfig>[] {
+  if (difficulty !== 'wuji' || slots < 2) {
+    return [{}];
+  }
+
+  if (slots === 2) {
+    return [
+      { mode: 'search' },
+      { mode: 'threats', threatShare: 1 },
+    ];
+  }
+
+  return [
+    { mode: 'search' },
+    // Pure VCF: cheap per node, so it can afford to look very far ahead.
+    { mode: 'threats', threatShare: 1, vcfDepth: 20, vctDepth: 0, vcfNodeLimit: 600_000 },
+    // VCT with a deeper threat chain than the sequential level could afford.
+    { mode: 'threats', threatShare: 1, vcfDepth: 14, vctDepth: 14, vctNodeLimit: 1_500_000 },
+  ];
+}
+
+const VIA_PRIORITY: Record<GomokuSearchResult['via'], number> = {
+  win: 6,
+  vcf: 5,
+  vct: 4,
+  book: 3,
+  block: 2,
+  search: 1,
+  fallback: 0,
+  none: -1,
+};
+
+/**
+ * Combines the workers' answers. A proven win always beats a heuristic move;
+ * between two searches the deeper one wins, then the better score.
+ */
+export function pickParallelResult(
+  results: (GomokuSearchResult | null)[],
+): GomokuSearchResult | null {
+  let best: GomokuSearchResult | null = null;
+
+  for (const result of results) {
+    if (!result || result.index < 0) {
+      continue;
+    }
+
+    if (!best) {
+      best = result;
+      continue;
+    }
+
+    const priority = VIA_PRIORITY[result.via];
+    const bestPriority = VIA_PRIORITY[best.via];
+
+    if (priority > bestPriority) {
+      best = result;
+    } else if (priority === bestPriority) {
+      if (result.depth > best.depth || (result.depth === best.depth && result.score > best.score)) {
+        best = result;
+      }
+    }
+  }
+
+  return best;
+}
 
 interface DifficultyWeights {
   offense: number;
@@ -27,7 +183,7 @@ const DIRECTIONS = [
   { row: 1, col: -1 },
 ] as const;
 
-const DIFFICULTY_WEIGHTS: Record<GomokuAIDifficulty, DifficultyWeights> = {
+const DIFFICULTY_WEIGHTS: Record<LegacyGomokuDifficulty, DifficultyWeights> = {
   easy: {
     offense: 1,
     defense: 0.45,
@@ -209,7 +365,7 @@ function evaluateMoveScore(
   board: GomokuBoard,
   pos: GomokuPosition,
   stone: GomokuStone,
-  difficulty: GomokuAIDifficulty,
+  difficulty: LegacyGomokuDifficulty,
 ) {
   const opponent = getOpponentStone(stone);
   const weights = DIFFICULTY_WEIGHTS[difficulty];
@@ -254,7 +410,7 @@ function listWinningMoves(board: GomokuBoard, stone: GomokuStone) {
 function sortMovesByHeuristic(
   board: GomokuBoard,
   stone: GomokuStone,
-  difficulty: GomokuAIDifficulty,
+  difficulty: LegacyGomokuDifficulty,
 ) {
   return getCandidateMoves(board)
     .map((move) => ({
@@ -267,7 +423,7 @@ function sortMovesByHeuristic(
 function scoreOpponentBestReply(
   boardAfterMove: GomokuBoard,
   aiStone: GomokuStone,
-  difficulty: GomokuAIDifficulty,
+  difficulty: LegacyGomokuDifficulty,
 ) {
   const opponent = getOpponentStone(aiStone);
   const immediateOpponentWins = listWinningMoves(boardAfterMove, opponent);
@@ -301,10 +457,10 @@ function scoreOpponentBestReply(
   return Math.max(...scores);
 }
 
-export function getAIMove(
+function getLegacyMove(
   board: GomokuBoard,
   aiStone: GomokuStone,
-  difficulty: GomokuAIDifficulty,
+  difficulty: LegacyGomokuDifficulty,
 ): GomokuPosition | null {
   if (!hasAnyStone(board)) {
     return getCenterMove();
@@ -354,4 +510,60 @@ export function getAIMove(
 
   const randomIndex = Math.floor(Math.random() * topCount);
   return candidates[randomIndex].move;
+}
+
+/**
+ * Runs the search levels and reports how the move was found, which the smoke
+ * tests use to assert that VCF / VCT actually fire.
+ */
+export function searchAdvancedMove(
+  board: GomokuBoard,
+  aiStone: GomokuStone,
+  difficulty: AdvancedGomokuDifficulty,
+  overrides?: Partial<GomokuSearchConfig>,
+): GomokuSearchResult | null {
+  return searchBestMove(board, aiStone, getSearchConfig(difficulty, overrides));
+}
+
+export interface GomokuMoveOutcome {
+  move: GomokuPosition | null;
+  result: GomokuSearchResult | null;
+}
+
+/**
+ * One worker's share of a move. `overrides` is what `getParallelPlan` handed
+ * out; a `threats` role that proves nothing returns a null move on purpose, so
+ * it can never outvote the worker that actually searched.
+ */
+export function computeGomokuMove(
+  board: GomokuBoard,
+  aiStone: GomokuStone,
+  difficulty: GomokuAIDifficulty,
+  overrides?: Partial<GomokuSearchConfig>,
+): GomokuMoveOutcome {
+  if (!isAdvancedDifficulty(difficulty)) {
+    return { move: getLegacyMove(board, aiStone, difficulty), result: null };
+  }
+
+  const result = searchAdvancedMove(board, aiStone, difficulty, overrides);
+
+  if (result && result.index >= 0) {
+    return { move: toPosition(result.index), result };
+  }
+
+  if (overrides?.mode === 'threats') {
+    return { move: null, result };
+  }
+
+  // The search only comes back empty on a full or unreachable board; fall back
+  // to the heuristic so a game can never stall on an AI turn.
+  return { move: getLegacyMove(board, aiStone, 'master'), result };
+}
+
+export function getAIMove(
+  board: GomokuBoard,
+  aiStone: GomokuStone,
+  difficulty: GomokuAIDifficulty,
+): GomokuPosition | null {
+  return computeGomokuMove(board, aiStone, difficulty).move;
 }

@@ -13,6 +13,9 @@ const difficultyLabelMap: Record<GomokuAIDifficulty, string> = {
   normal: '普通',
   hard: '困難',
   master: '棋聖',
+  god: '棋神',
+  tianyuan: '天元',
+  wuji: '無極',
 };
 
 const GomokuGame: React.FC = () => {

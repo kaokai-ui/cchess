@@ -18,7 +18,14 @@ const difficultyOptions: [GomokuAIDifficulty, string][] = [
   ['normal', '普通'],
   ['hard', '困難'],
   ['master', '棋聖'],
+  ['god', '棋神'],
+  ['tianyuan', '天元'],
+  ['wuji', '無極'],
 ];
+
+// The two deep levels only exist for gomoku; bright / dark chess keep their own
+// four-level ladder, so the picker hides them outside 五子棋.
+const gomokuOnlyDifficulties: GomokuAIDifficulty[] = ['god', 'tianyuan', 'wuji'];
 
 const gameModeLabels: Record<GameMode, string> = {
   bright: '明棋',
@@ -66,6 +73,21 @@ const Home: React.FC = () => {
     };
   }, []);
 
+  const availableDifficulties = useMemo(
+    () =>
+      difficultyOptions.filter(
+        ([key]) => gameMode === 'gomoku' || !gomokuOnlyDifficulties.includes(key),
+      ),
+    [gameMode],
+  );
+
+  // Switching to 明棋 / 暗棋 must not carry a gomoku-only level into their AI.
+  // Derived rather than reset, so the choice comes back on returning to 五子棋.
+  const effectiveDifficulty: GomokuAIDifficulty =
+    gameMode === 'gomoku' || !gomokuOnlyDifficulties.includes(difficulty)
+      ? difficulty
+      : 'master';
+
   const statusClass = (enabled: boolean) =>
     enabled ? 'text-emerald-700' : 'text-rose-700';
 
@@ -86,7 +108,7 @@ const Home: React.FC = () => {
     };
 
     navigate(routeByMode[gameMode], {
-      state: { difficulty },
+      state: { difficulty: effectiveDifficulty },
     });
   };
 
@@ -166,12 +188,12 @@ const Home: React.FC = () => {
                 <label className="mb-3 block text-lg font-black text-stone-800 sm:text-xl">
                   AI 難度
                 </label>
-                <div className="grid grid-cols-2 gap-3">
-                  {difficultyOptions.map(([key, label]) => (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {availableDifficulties.map(([key, label]) => (
                     <button
                       key={key}
                       className={`rounded-2xl px-4 py-3 text-lg font-black transition-all ${
-                        difficulty === key
+                        effectiveDifficulty === key
                           ? 'bg-amber-700 text-white shadow-lg'
                           : 'bg-white text-amber-900 shadow-sm hover:bg-amber-100'
                       }`}
@@ -183,6 +205,9 @@ const Home: React.FC = () => {
                 </div>
                 <p className="mt-3 text-sm leading-7 text-stone-600 sm:text-base">
                   五子棋會使用自己的 AI 判型與攻防評估；明棋與暗棋的 AI 邏輯不會被共用或覆蓋。
+                  {gameMode === 'gomoku'
+                    ? '棋神會算穿連四殺棋，天元再加上活三連環殺與開局定式，兩者都在背景執行緒思考。'
+                    : ''}
                 </p>
               </section>
             )}

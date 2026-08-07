@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { getAIMove, type GomokuAIDifficulty } from '../shared/gomoku/ai';
+import type { GomokuAIDifficulty } from '../shared/gomoku/ai';
+import { computeGomokuAiMove } from '../shared/gomoku/aiRunner';
 import {
   checkWinner,
   createInitialBoard,
@@ -52,6 +53,26 @@ const AI_TURN_DELAY_MS = 420;
 
 const { schedule: scheduleGomokuTimer, clear: clearGomokuTimers } = createAiTurnScheduler();
 
+// The search levels run in a worker, so a move can still be in flight when the
+// player resets, leaves or takes a move back. Every AI turn carries a sequence
+// number and a stale result is dropped instead of landing on a fresh board.
+let aiRequestSeq = 0;
+
+function cancelPendingAiTurn() {
+  aiRequestSeq += 1;
+  clearGomokuTimers();
+}
+
+const THINKING_MESSAGES: Record<GomokuAIDifficulty, string> = {
+  easy: 'AI 正在思考…',
+  normal: 'AI 正在思考…',
+  hard: 'AI 正在思考…',
+  master: 'AI（棋聖）正在推演最佳落點…',
+  god: 'AI（棋神）正在計算連四殺棋…',
+  tianyuan: 'AI（天元）正在推演連續威脅…',
+  wuji: 'AI（無極）正在全力運算…',
+};
+
 function getNextStone(stone: GomokuStone): GomokuStone {
   return stone === 'black' ? 'white' : 'black';
 }
@@ -69,7 +90,7 @@ export const useGomokuGameStore = create<GomokuGameStore>((set, get) => {
     const playerStone: GomokuStone = 'black';
     const aiStone: GomokuStone = 'white';
 
-    clearGomokuTimers();
+    cancelPendingAiTurn();
 
     set({
       board: createInitialBoard(),
@@ -221,39 +242,53 @@ export const useGomokuGameStore = create<GomokuGameStore>((set, get) => {
     },
 
     executeAiTurn: () => {
-      const { aiDifficulty, aiStone, currentPlayer, phase } = get();
+      const { aiDifficulty, aiStone, board, currentPlayer, phase } = get();
 
       if (phase !== 'playing' || currentPlayer !== aiStone) {
         return;
       }
 
+      const requestId = (aiRequestSeq += 1);
+      const startedAt = Date.now();
+
       set({
         isAiThinking: true,
-        message:
-          aiDifficulty === 'master' ? 'AI（棋聖）正在推演最佳落點…' : 'AI 正在思考…',
+        message: THINKING_MESSAGES[aiDifficulty],
       });
 
-      scheduleGomokuTimer(() => {
-        const state = get();
-
-        if (state.phase !== 'playing' || state.currentPlayer !== state.aiStone) {
+      void computeGomokuAiMove(board, aiStone, aiDifficulty).then((aiMove) => {
+        if (requestId !== aiRequestSeq) {
           return;
         }
 
-        const aiMove = getAIMove(state.board, state.aiStone, state.aiDifficulty);
+        // Keep the original pacing: a fast level should still feel like a turn,
+        // while a slow search simply plays as soon as it is done.
+        const remainingDelay = Math.max(0, AI_TURN_DELAY_MS - (Date.now() - startedAt));
 
-        if (!aiMove) {
-          set({
-            phase: 'gameOver',
-            winner: null,
-            isAiThinking: false,
-            message: '平手，AI 找不到合法落點。',
-          });
-          return;
-        }
+        scheduleGomokuTimer(() => {
+          const state = get();
 
-        commitMove(aiMove);
-      }, AI_TURN_DELAY_MS);
+          if (
+            requestId !== aiRequestSeq ||
+            state.phase !== 'playing' ||
+            state.currentPlayer !== state.aiStone
+          ) {
+            return;
+          }
+
+          if (!aiMove) {
+            set({
+              phase: 'gameOver',
+              winner: null,
+              isAiThinking: false,
+              message: '平手，AI 找不到合法落點。',
+            });
+            return;
+          }
+
+          commitMove(aiMove);
+        }, remainingDelay);
+      });
     },
 
     resetGame: () => {
@@ -262,7 +297,7 @@ export const useGomokuGameStore = create<GomokuGameStore>((set, get) => {
     },
 
     leaveGame: () => {
-      clearGomokuTimers();
+      cancelPendingAiTurn();
       set({
         board: createInitialBoard(),
         currentPlayer: 'black',
@@ -287,7 +322,7 @@ export const useGomokuGameStore = create<GomokuGameStore>((set, get) => {
         return;
       }
 
-      clearGomokuTimers();
+      cancelPendingAiTurn();
 
       // A single ply may land on the AI's turn (the AI would just replay). Step
       // back an extra ply so the player's own move is actually taken back.

@@ -9,6 +9,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "test:gomoku": "tsx scripts/gomoku-smoke.ts",
     "test:online-dark": "tsx scripts/online-dark-multiplayer-smoke.ts",
     "test:online-bright": "tsx scripts/online-bright-multiplayer-smoke.ts",
     "test:online-gomoku": "tsx scripts/online-gomoku-multiplayer-smoke.ts"
